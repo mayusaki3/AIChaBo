@@ -1,6 +1,6 @@
-# AIChatBot（AIChaBo/あいちゃぼ） 
+# AIChaBo（AIChaBo/あいちゃぼ） 
 
-AIChatBot（AIChaBo/あいちゃぼ） は、ユーザーの OpenAI API キーを使って Discord 上で ChatGPT を利用できる Bot です。  
+AIChaBo（あいちゃぼ）は、ユーザーの OpenAI API キーを使って Discord 上で ChatGPT を利用できる Bot です。  
 構成は「UI層」「AI層」「共通層」に分かれており、将来的な多プラットフォーム対応を想定しています。
 
 ## 環境変数の設定（Discord用）
@@ -31,16 +31,16 @@ sudo apt install -y git python3 python3-venv python3-pip unzip
 
 # 任意のディレクトリ作成
 cd /opt
-sudo mkdir AIChatBot
-sudo chown $USER AIChatBot
-cd AIChatBot
+sudo mkdir AIChaBo
+sudo chown $USER AIChaBo
+cd AIChaBo
 
 # 仮想環境の作成と有効化
 python3 -m venv venv
 source venv/bin/activate
 
-# AIChatBotをクローン
-git clone -b main https://github.com/mayusaki3/AIChatBot.git src
+# AIChaBoをクローン
+git clone -b main https://github.com/mayusaki3/AIChaBo.git src
 cd src
 
 # requirements.txt に応じて依存ライブラリをインストール
@@ -63,17 +63,17 @@ nano .env
 
 ## 使用方法
 ### サービスの設定内容
-/etc/systemd/system/AIChatBot.service
+/etc/systemd/system/AIChaBo.service
 ```ini
 [Unit]
-Description=AIChatBot Service
+Description=AIChaBo Service
 After=network.target
 
 [Service]
 Type=simple
 User=ubuntu
-WorkingDirectory=/opt/AIChatBot/src
-ExecStart=/opt/AIChatBot/venv/bin/python ui/discord/Discord_AIChatBot.py
+WorkingDirectory=/opt/AIChaBo/src
+ExecStart=/opt/AIChaBo/venv/bin/python ui/discord/Discord_AIChaBo.py
 Restart=always
 
 [Install]
@@ -82,25 +82,25 @@ WantedBy=multi-user.target
 ### 起動方法
 ```shell
 # 上記設定を書き込み
-sudo nano /etc/systemd/system/AIChatBot.service
+sudo nano /etc/systemd/system/AIChaBo.service
 
 # 設定有効化と起動
 sudo systemctl daemon-reexec
 sudo systemctl daemon-reload
-sudo systemctl enable AIChatBot
-sudo systemctl start AIChatBot
+sudo systemctl enable AIChaBo
+sudo systemctl start AIChaBo
 
 # 動作確認
-sudo journalctl -u AIChatBot -f
+sudo journalctl -u AIChaBo -f
 ```
 
 ### 更新方法
 ```shell
-# AIChatBot サーバーを停止
-sudo systemctl stop AIChatBot.service
+# AIChaBo サーバーを停止
+sudo systemctl stop AIChaBo.service
 
 # 最新のコードを取得
-cd /opt/AIChatBot/src
+cd /opt/AIChaBo/src
 git pull origin main
 
 # 仮想環境をアクティベート
@@ -110,15 +110,15 @@ source ../venv/bin/activate
 pip install -r requirements.txt
 
 # サービス再起動
-sudo systemctl start AIChatBot.service
+sudo systemctl start AIChaBo.service
 
 # ステータス確認
-sudo systemctl status AIChatBot.service
+sudo systemctl status AIChaBo.service
 ```
 
 ## /コマンド一覧（Discord）
 
-AIChatBot は以下の /コマンドを提供しています：
+AIChaBo は以下の /コマンドを提供しています：
 
 | 基本コマンド                   | 説明                                                                   |
 |--------------------------------|------------------------------------------------------------------------|
@@ -135,12 +135,15 @@ AIChatBot は以下の /コマンドを提供しています：
 *1: 認証情報は「自分の認証情報」＞「共有された認証情報」の順に使用します。自分の認証情報のみ共有でき、誰の認証情報でも共有解除できます。
 
 *2: optionは、以下が指定できます。
->| option             | 説明                                                                |
->|--------------------|---------------------------------------------------------------------|
->| `-exp`             | 現スレッドのコンテキストリストを common/session/dump にエクスポート |
->| `-expall`          | 全スレッドのコンテキストリストを common/session/dump にエクスポート |
->| `-printmsg:on/off` | ONで、AIに投げるメッセージ内容をコンソールに出力                    |
->| `-showopt`         | 設定されているオプションを表示                                      |
+>| option              | 説明                                                                |
+>|---------------------|---------------------------------------------------------------------|
+>| `-exp`              | 現スレッドのコンテキストリストを common/session/dump にエクスポート |
+>| `-expall`           | 全スレッドのコンテキストリストを common/session/dump にエクスポート |
+>| `-expprompt`        | 現在使用中のプロンプトを common/session/dump にエクスポート         |
+>| `-loadprompt`       | プロンプトを再読み込み                                              |
+>| `-printmsg:on/off`  | ONで、AIに投げるメッセージ内容をコンソールに出力                    |
+>| `-showopt`          | 設定されているオプションを表示                                      |
+>| `-tracetool:on/off` | ONで、AIが起動するツール内容をコンソールに出力                      |
 
 | スレッド内コマンド             | 説明                                                                   |
 |--------------------------------|------------------------------------------------------------------------|
@@ -214,9 +217,9 @@ AIChatBot は以下の /コマンドを提供しています：
 
 ## 招待リンクの設定
 
-AIChatBotの招待リンクの作成方法は以下の通りです。
+AIChaBoの招待リンクの作成方法は以下の通りです。
    1. [Discord Developer Portal](https://discord.com/developers/applications) にアクセス
-   2. My Applicationsで AIChatBot を選択
+   2. My Applicationsで AIChaBo を選択
    3. 左メニュー「OAuth2」→「OAuth2 URL Generator」を表示
    4. 「scopes」で以下のパーミッションをチェック  
      - bot  
@@ -232,8 +235,8 @@ AIChatBotの招待リンクの作成方法は以下の通りです。
      - Use Slash Commands  
    6. 「Generated URL」でコピーしてブラウザで開き、サーバーを選択して招待
 
-AIChatBot
+AIChaBo
 https://discord.com/oauth2/authorize?client_id=1392390825148944406&permissions=397284543488&integration_type=0&scope=bot+applications.commands
 
-AIChatBot Dev
+AIChaBo Dev
 https://discord.com/oauth2/authorize?client_id=1395576546747744357&permissions=397284543488&integration_type=0&scope=bot+applications.commands

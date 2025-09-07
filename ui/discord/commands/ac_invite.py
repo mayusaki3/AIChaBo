@@ -1,12 +1,13 @@
 import discord
 from discord import app_commands, Interaction, Thread
-from discord_handler import service_name
 from common.utils.thread_utils import add_thread_to_server, is_thread_managed
 
 HELP_TEXT = {
     "usage": "/ac_invite",
     "description": "🧵スレッド内のみ: あいちゃぼを現在のスレッドに招待します。"
 }
+
+SERVICE_NAME = "discord"
 
 @app_commands.command(name="ac_invite", description=HELP_TEXT["description"])
 async def ac_invite_command(interaction: Interaction):
@@ -16,7 +17,7 @@ async def ac_invite_command(interaction: Interaction):
         return
 
     thread = interaction.channel
-    if is_thread_managed(service_name, interaction.guild_id, thread.id):
+    if is_thread_managed(SERVICE_NAME, interaction.guild_id, thread.id):
         await interaction.followup.send("⚠️ あいちゃぼは既にこのスレッドに参加しています。", ephemeral=True)
         return
 
@@ -34,7 +35,7 @@ async def ac_invite_command(interaction: Interaction):
                 await interaction.followup.send("⚠️ あいちゃぼを招待する権限がありません。\n@あいちゃぼ に memtion してから再実行してください。", ephemeral=True)
                 return
 
-        add_thread_to_server(service_name, interaction.guild_id, thread.id)
+        add_thread_to_server(SERVICE_NAME, interaction.guild_id, thread.id)
         await interaction.followup.send("✅ あいちゃぼをこのスレッドに招待しました。", ephemeral=True)
         await thread.send(
             f"💬/ac_invite: あいちゃぼが参加しました。\n"

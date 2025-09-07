@@ -1,10 +1,15 @@
 import os
-import sys
-import discord
 import io
-from discord import app_commands, Interaction, Thread
+import re
+import base64
+import aiohttp
+import discord
+from discord import app_commands, Thread
 from discord.ext import commands
 from dotenv import load_dotenv
+from typing import List, Optional
+
+# セッション/ユーティリティ
 from common.session.user_session_manager import user_session_manager
 from common.session.server_session_manager import server_session_manager
 from common.utils import thread_utils
@@ -12,11 +17,18 @@ from common.utils.thread_utils import remove_thread_from_server, is_thread_manag
 from common.utils.websearch_utils import search_web, format_results_as_markdown
 from ui.discord.commands.load_commands import load_commands
 from ui.discord.discord_thread_context import context_manager
+
+# AI/アクション
 from ai.openai.openai_api import call_chatgpt, generate_image_from_prompt
 from common.actions.imagegen_action import ImageGenAction
 from common.actions.websearch_action import WebSearchAction
-import aiohttp
-import base64
+from common.actions.webread_action import WebReadAction
+from common.actions.webimage_action import WebImageAction
+
+# プロンプトローダ（injection は取得時置換）
+from common.session.prompt_loader import (
+    load_for_ctx, get_prompt_for_ctx, read_snippet_for_ctx
+)
 
 load_dotenv()
 
@@ -25,37 +37,91 @@ raw_gid = os.getenv("DISCORD_GUILD_ID", "").strip()
 USE_GUILD = bool(raw_gid and not raw_gid.startswith("#"))
 GUILD_OBJ = discord.Object(id=int(raw_gid)) if USE_GUILD else None
 
-service_name = "discord"
 intents = discord.Intents.all()
 intents.members = True
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 
-# 添付画像をbase64で取得
-async def fetch_image_as_base64(url):
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as resp:
-            if resp.status == 200:
-                image_bytes = await resp.read()
-                return base64.b64encode(image_bytes).decode('utf-8')
+SERVICE_NAME = "discord"
 
-# Discordメッセージ送信イベント
+# ====== ユーティリティ ======
+def _provider_is_openai(p: str) -> bool:
+    return str(p).strip().lower() == "openai"
+
+async def _fetch_reply_source(message: discord.Message) -> Optional[discord.Message]:
+    if message.reference and message.reference.message_id:
+        if message.reference.cached_message:
+            return message.reference.cached_message
+        try:
+            return await message.channel.fetch_message(message.reference.message_id)
+        except Exception:
+            pass
+    try:
+        async for m in message.channel.history(limit=10, before=message.created_at):
+            if m.author.id != message.author.id and not m.author.bot:
+                return m
+    except Exception:
+        pass
+    return None
+
+def _format_reply_context(src: discord.Message, *, max_chars: int = 800) -> str:
+    from datetime import timezone, timedelta
+    try:
+        from zoneinfo import ZoneInfo
+        ts = src.created_at.astimezone(ZoneInfo("Asia/Tokyo")).strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        ts = (src.created_at.replace(tzinfo=timezone.utc) + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M")
+
+    content = (src.content or "").strip()
+    if len(content) > max_chars:
+        content = content[:max_chars] + "…"
+
+    urls = []
+    if src.content:
+        urls += re.findall(r"https?://\S+", src.content)
+    urls += [att.url for att in src.attachments if hasattr(att, "url")]
+
+    lines = [
+        "[reply_context]",
+        f"author: {getattr(src.author, 'display_name', src.author.name)}",
+        f"time_jst: {ts}",
+        f"jump_url: {src.jump_url}",
+        f"content: {content or '(no text)'}",
+    ]
+    if urls:
+        lines.append("links:")
+        for u in urls[:8]:
+            lines.append(f"- {u}")
+    return "\n".join(lines)
+
+# ====== メッセージ処理（AIスレッド） ======
 @client.event
-async def on_message(message):
+async def on_message(message: discord.Message):
     # AIチャットスレッド以外は無視
     thread = message.channel
     if isinstance(thread, Thread):
-        guild_id = str(message.guild.id)
-        if not thread_utils.is_thread_managed(service_name, guild_id, thread.id):
+        guild_id_str = str(message.guild.id)
+        if not thread_utils.is_thread_managed(SERVICE_NAME, guild_id_str, thread.id):
             return
     else:
         return
 
-    # メッセージをコンテキストに追加
+    # スレッドのコンテキスト初期化/追記
     author_name = message.author.display_name
     refid = ""
     if not context_manager.is_initialized(thread.id):
+        # ensure_initialized 内で履歴ロード（discord_thread_context.py 側）
         await context_manager.ensure_initialized(thread)
+        # 初回の取りこぼし対策：末尾が今回IDでなければ追加
+        hist = list(context_manager.get_context(thread.id))
+        if not hist or hist[-1].get("id") != str(message.id):
+            context_manager.append_context(
+                thread.id,
+                f"{author_name}: {message.content}",
+                str(message.id),
+                "",
+                message.attachments
+            )
     else:
         if message.reference and message.reference.message_id:
             refid = str(message.reference.message_id)
@@ -65,17 +131,19 @@ async def on_message(message):
                     await context_manager.backfill_reply_chain(thread, message, max_hops=10)
             except Exception as e:
                 print(f"[reply-chain] backfill failed: {e}")
-        context_manager.append_context(thread.id, f"{author_name}: {message.content}", str(message.id), refid, message.attachments)
+        context_manager.append_context(
+            thread.id,
+            f"{author_name}: {message.content}",
+            str(message.id),
+            refid,
+            message.attachments
+        )
 
     # メッセージがボットからのものであれば終了
     if message.author.bot:
         return
 
-    context_list = []
-    for context in context_manager.get_context(thread.id):
-        context_list.append(context["message"])
-    
-    # 認証情報チェック
+    # 認証情報チェック （User > Server > 未登録）
     user_id = message.author.id
     guild_id = message.guild.id
     if not user_session_manager.has_session(user_id):
@@ -83,141 +151,267 @@ async def on_message(message):
             await message.reply("⚠️ あいちゃぼと会話するには、認証情報を /ac_auth で登録してください。")
             return
 
-    # 認証情報を取得
-    if server_session_manager.has_session(guild_id):
-        auth_data = server_session_manager.get_session(guild_id)
-    else:
+    # 認証情報を取得 （User優先）
+    if user_session_manager.has_session(user_id):
         auth_data = user_session_manager.get_session(user_id)
+    else:
+        auth_data = server_session_manager.get_session(guild_id)
 
-    # 返信元の情報を注入
-    if refid:
-        try:
-            parent_chain = await context_manager.fetch_parent_chain(thread, message, 1)
-            print(f"parent_chain={parent_chain}")
-            if parent_chain:
-                parent_text = parent_chain[-1].content or "(テキストなし)"
-                reply_hint = auth_data["chat"]["reply_prompt"].format(parent_message=parent_text)
-                context_list.append(reply_hint)
-        except Exception as e:
-            print(f"[reply-chain] backfill failed: {e}")
+    # プロンプトを読み込み（通常は force=False。/ac_auth 直後などは別経路で force=True）
+    try:
+        load_for_ctx(user_id=user_id, guild_id=guild_id, force=False)
+    except Exception as e:
+        print(f"[prompt_loader] load_for_ctx failed: {e}")
 
-    # 追加情報を注入
-    context_list.append(f"\s{context_manager.get_injection_message(auth_data)}")
-    context_list.append("\s" + auth_data["chat"]["aichabo_prompt"])
-    context_list.append("\s" + auth_data["chat"]["imagegen_prompt"])
-    context_list.append("\s" + auth_data["chat"]["websearch_prompt"])
+    # ===== コンテキスト組み立て =====
+    context_list = []
 
-    # 添付画像がある場合はコンテキストに追加
-    # imageuse = is_image_model_supported(auth_data)
-    # if message.attachments and imageuse:
-    #     msg = "["
-    #     count = 0
-    #     for attachment in message.attachments:
-    #         if attachment.content_type and attachment.content_type.startswith("image/"):
-    #             image_base64 = await fetch_image_as_base64(attachment.url)
-    #             if image_base64:
-    #                 if count > 0:
-    #                     msg += ","
-    #                 msg += '{"type": "image_url","image_url": {"url": '
-    #                 msg += f"data:image/png;base64,{image_base64}"
-    #                 msg += '}'
-    #                 count += 1
-    #     msg += "]"
-    #     context_list.append(f"{msg}")
+    # システム（結合済み / injection は取得時に now_jst 置換）
+    try:
+        def _nsfw_flag(obj) -> bool:
+            try:
+                if obj is None:
+                    return False
+                if hasattr(obj, "nsfw"):  # TextChannel など
+                    return bool(getattr(obj, "nsfw"))
+                if hasattr(obj, "is_nsfw"):  # メソッドの場合
+                    f = getattr(obj, "is_nsfw")
+                    return bool(f() if callable(f) else f)
+            except Exception:
+                pass
+            return False
 
-    # オプション -printmsg:on
+        parent = getattr(thread, "parent", None)
+        parent_nsfw = _nsfw_flag(parent)
+        thread_nsfw = _nsfw_flag(thread)
+
+        system_prompt_text = get_prompt_for_ctx(
+            "chat", user_id, guild_id,
+            extra_vars = {
+                "thread_name": getattr(thread, "name", ""),
+                "channel_name": getattr(parent, "name", "") if parent else "",
+                "channel_is_nsfw": "true" if (parent_nsfw or thread_nsfw) else "false",
+            }
+        )
+        context_list.append("\s" + system_prompt_text)
+    except Exception as e:
+        print(f"[prompt_loader] get_prompt_for_ctx failed: {e}")
+
+    # 履歴を積む（今回の発話を重複させない）
+    hist = list(context_manager.get_context(thread.id))
+    if hist and hist[-1].get("msgid") == str(message.id):
+        hist_prev = hist[:-1]
+    else:
+        hist_prev = hist
+    for context in hist_prev:
+        context_list.append(context["message"])
+
+    # 返信時のみ、追加ルール（reply_to.txt）＋返信元コンテキスト
+    reply_src = None
+    if message.reference and message.reference.message_id:
+        reply_src = await _fetch_reply_source(message)
+    if reply_src:
+        reply_to_snippet = read_snippet_for_ctx("reply_to", user_id, guild_id)
+        if reply_to_snippet:
+            context_list.append("\s" + reply_to_snippet)
+        context_list.append(_format_reply_context(reply_src))
+
+    # 最後に今回のユーザー発話（＝応答対象）
+    user_text = message.clean_content or message.content or ""
+    context_list.append(user_text)
+
+    # オプション
     printmsg = server_session_manager.get_option(guild_id, "printmsg", False)
+    trace_tool = server_session_manager.get_option(guild_id, "tracetool", False)
+    max_tool_steps = server_session_manager.get_option(guild_id, "max_tool_steps", 10)
+    tool_trace: List[str] = []
 
+    steps = 0
     while True:
+        steps += 1
+
         # オプション -printmsg:on 処理
         if printmsg:
             print("context_list =>")
             for msg in context_list:
                 if msg.startswith("\s"):
-                    msg = msg.replace("\s", "system: ", 1)
-                    print(f"  \033[32m{msg}\033[0m")
-                else:   
+                    out = msg.replace("\s", "system: ", 1)
+                    print(f"  \033[32m{out}\033[0m")
+                else:
                     print(f"  \033[33m{msg}\033[0m")
 
-        # チャット ==========
-
-        # OpenAIの場合
-        reply =""
-        if auth_data["chat"]["provider"] == "OpenAI":
-            async with message.channel.typing():
-                reply = await call_chatgpt(context_list, auth_data["chat"]["api_key"], auth_data["chat"]["model"], auth_data["chat"]["max_tokens"])
-
-                # オプション -printmsg:on 処理
-                if printmsg:
-                    print(f"reply => \033[36m{reply}\033[0m")
-
-        # ツール判定
-        action = ImageGenAction.parse(reply)
-        if not action:
-            action = WebSearchAction.parse(reply)
-
-        if not action:
-            break
-
-        # オプション -printmsg:on 処理
-        if printmsg and action:
-            print(f"action => \033[35m{action.tool}\033[0m")
-
-        if action.tool == "image.generate":
-            # 画像生成 ==========
+        # ===== LLM 呼び出し → Action 実行ループ =====
+        reply = ""
+        for _ in range(2):  # ツール1回まで再試行（必要なら増やす）
+            # チャット ==========
 
             # OpenAIの場合
-            if auth_data["imagegen"]["provider"] == "OpenAI":
+            if auth_data["chat"]["provider"] == "OpenAI":
+                async with message.channel.typing():
+                    reply = await call_chatgpt(
+                        context_list,
+                        auth_data["chat"]["api_key"],
+                        auth_data["chat"]["model"],
+                        auth_data["chat"].get("max_tokens", 2048)
+                    )
+
+            # オプション -printmsg:on 処理
+            if printmsg:
+                print(f"reply => \033[36m{reply}\033[0m")
+
+            # Action 解析
+            action = (
+                ImageGenAction.parse(reply)
+                or WebSearchAction.parse(reply)
+                or WebReadAction.parse(reply)
+                or WebImageAction.parse(reply)
+            )
+            if not action:
+                # アクション無し → ループ終端（通常応答）
+                break
+
+            # ツール名をトレース用に記録
+            tool_name = action.tool
+            tool_trace.append(tool_name)
+
+            # オプション -printmsg:on 処理
+            if printmsg and action:
+                print(f"action => \033[35m{action.tool}\033[0m")
+
+            # 画像生成 ==========
+            if action.tool == "image.generate":
+
+                # OpenAIの場合
+                if _provider_is_openai(auth_data["imagegen"]["provider"]):
+                    # LLM 指定のメッセージ置換ヘルパ
+                    def _fmt(template: Optional[str], error: Exception | None = None) -> str:
+                        t = (template or "").strip()
+                        if not t:
+                            return ""
+                        subst = {
+                            "n": str(getattr(action, "n", 1)),
+                            "size": action.size or auth_data["imagegen"].get("size", "1024x1024"),
+                           "error": (str(error) if error else ""),
+                        }
+                        for k, v in subst.items():
+                            t = t.replace("{"+k+"}", v)
+                        return t
+
+                    try:
+                        async with message.channel.typing():
+                            img_bytes = await generate_image_from_prompt(
+                                prompt=action.prompt,
+                                api_key=auth_data["imagegen"]["api_key"],
+                                model=auth_data["imagegen"]["model"],
+                                size=auth_data["imagegen"].get("size", "1024x1024"),
+                                quality=auth_data["imagegen"].get("quality", "standard"),
+                                timeout_sec=90
+                            )
+                            # 添付送信
+                            file = discord.File(fp=io.BytesIO(img_bytes), filename="aichabo_image.png")
+                            await message.channel.send(
+                                content=action.success_message,
+                                file=file
+                            )
+                    except Exception as e:
+                        # 画像生成だけ失敗しても会話は続行できるよう、ここで握りつぶして通知のみ
+                        await message.channel.send(f"{action.failure_message}: {e}")
+
+                # オプション -tracetool:on 処理
+                if trace_tool:
+                    chain = " → ".join(tool_trace + ["response"])
+                    print(f"[trace] {chain}")
+
+                return
+
+            # WEB検索 ==========
+            if action.tool == "web.search":
                 try:
                     async with message.channel.typing():
-                        img_bytes = await generate_image_from_prompt(
-                            prompt=action.prompt,
-                            api_key=auth_data["imagegen"]["api_key"],
-                            model=auth_data["imagegen"]["model"],
-                            size=auth_data["imagegen"]["size"],
-                            quality=auth_data["imagegen"]["quality"],
-                            timeout_sec=90
+                        search_results = await search_web(
+                            queries=action.queries,
+                            top_result=action.top_result,
+                            recency_days=action.recency_days,
+                            lang=action.lang,
+                            region=action.region,
+                            timeout=15
                         )
-                        # 添付送信
-                        file = discord.File(fp=io.BytesIO(img_bytes), filename="aichabo_image.png")
-                        await message.channel.send(
-                            content=action.success_message,
-                            file=file
-                        )
+                        if not search_results:
+                            result = f"{action.queries} に関する情報は見つかりませんでした。"
+                        else:
+                            formatted_results = format_results_as_markdown(
+                                search_results,
+                                require_citations=action.require_citations
+                            )
+                            result = f"\s{action.queries} の検索結果→{formatted_results}"
                 except Exception as e:
-                    # 画像生成だけ失敗しても会話は続行できるよう、ここで握りつぶして通知のみ
-                    await message.channel.send(f"{action.failure_message}: {e}")
-            return
+                    result = f"{action.queries} の検索中にエラーが発生しました: {e}"
 
-        if action.tool == "web.search":
-            # WEB検索 ==========
-            try:
-                async with message.channel.typing():
-                    search_results = await search_web(
-                        queries=action.queries,
-                        top_result=action.top_result,
-                        recency_days=action.recency_days,
-                        lang=action.lang,
-                        timeout=15
-                    )
-                    if not search_results:
-                        result = f"{action.queries} に関する情報は見つかりませんでした。"
-                    else:
-                        formatted_results = format_results_as_markdown(search_results, require_citations=action.require_citations)
-                        result = f"\s{action.queries} の検索結果→{formatted_results}"
-            except Exception as e:
-                result = f"{action.queries} の検索中にエラーが発生しました: {e}"
-            context_list.append(result)
-            if printmsg:
-                print(f"websearch result => \033[35m{result}\033[0m")
-            continue
+                # 検索結果を会話に追記して、必要ならもう一度 LLM へ
+                context_list.append(result)
+                if printmsg:
+                    print(f"websearch result => \033[35m{result}\033[0m")
+                # ループ継続（次のプロンプトでアクションが返らなくなるまで）
+                if steps >= max_tool_steps:
+	                # オプション -tracetool:on 処理
+                    if trace_tool:
+                        chain = " → ".join(tool_trace + ["response(max-step)"])
+                        print(f"[trace] {chain}")
+                    break
+                continue
 
+            # WEB読取 ==========
+            if action.tool == "web.read":
+                try:
+                    async with message.channel.typing():
+                        # TODO: 実装ポイント
+                        # - action.urls を巡回して HTML テキスト抽出（タイトル/本文/発行日など）
+                        # - 必要なら本文を要約して citations を付与
+                        # - 結果文字列を result に格納
+                        result = f"\s読み取り対象: {len(action.urls)}件（ひな形）"
+                except Exception as e:
+                    result = f"web.read の実行中にエラーが発生しました: {e}"
+                context_list.append(result)
+                # 続行（スキーマが返らなくなるまで）
+                if steps >= max_tool_steps:
+                    if trace_tool:
+                        chain = " → ".join(tool_trace + ["response(max-step)"])
+                        print(f"[trace] {chain}")
+                    break
+                continue
+
+            # 画像解析 ==========
+            if action.tool == "web.image":
+                try:
+                    async with message.channel.typing():
+                        # TODO: 実装ポイント
+                        # - action.image_urls を Vision API に渡す
+                        # - action.questions/tasks をヒントに解析
+                        # - 結果文字列を result に格納
+                        result = f"\s画像解析対象: {len(action.image_urls)}件（ひな形）"
+                except Exception as e:
+                    result = f"web.image の実行中にエラーが発生しました: {e}"
+                context_list.append(result)
+                # 続行
+                if steps >= max_tool_steps:
+                    if trace_tool:
+                        chain = " → ".join(tool_trace + ["response(max-step)"])
+                        print(f"[trace] {chain}")
+                    break
+                continue
+
+        # 不明なツール（将来拡張用） → 終了
         break
 
-    # レスポンス
+    # ===== 通常レスポンス送信 =====
     if reply:
         reply = reply.replace("あいちゃぼ: ", "", 1)
         await message.channel.send(reply)
+
+    # オプション -tracetool:on 処理
+    if trace_tool:
+        chain = " → ".join(tool_trace + ["response"]) if tool_trace else "response"
+        print(f"[trace] {chain}")
 
     return
 
@@ -227,9 +421,9 @@ async def on_thread_delete(thread: discord.Thread):
     thread_id = str(thread.id)
     guild_id = str(thread.guild.id)
 
-    if is_thread_managed(service_name, guild_id, thread_id):
+    if is_thread_managed(SERVICE_NAME, guild_id, thread_id):
         try:
-            remove_thread_from_server(service_name, guild_id, thread_id)
+            remove_thread_from_server(SERVICE_NAME, guild_id, thread_id)
             print(f"✅ あいちゃぼの会話対象からスレッド {thread_id} を削除しました。")
         except Exception as e:
             print(f"❌ あいちゃぼの会話対象からスレッド {thread_id} が削除できませんでした: {e}")
@@ -248,7 +442,7 @@ async def on_message_delete(message):
     print(f"❌ メッセージが削除されました: {message.content}")
     context_manager.reset_context(message.channel.id)
 
-# Bot起動イベント
+# ====== 起動/同期 ======
 @client.event
 async def on_ready():
     print(f"✅ {client.user} としてログインしました。(Ctrl-Cで終了します)")
@@ -266,7 +460,7 @@ async def on_ready():
 
         # 参加していないサーバーの検出とクリーニング（サーバーID単位）
         existing_server_ids = {str(guild.id) for guild in client.guilds}
-        thread_utils.clean_deleted_servers(service_name, existing_server_ids)
+        thread_utils.clean_deleted_servers(SERVICE_NAME, existing_server_ids)
 
         # すべてのサーバー（Guild）に対して処理
         for guild in client.guilds:
@@ -275,11 +469,11 @@ async def on_ready():
 
             # チャンネルごとのアーカイブ済みスレッド
             for channel in guild.text_channels:
-                    for thread in channel.threads:
-                        thread_ids.add(str(thread.id))
+                for thread in channel.threads:
+                    thread_ids.add(str(thread.id))
 
             # スレッド存在チェック用に記憶されたスレッド一覧をクリーンアップ
-            thread_utils.clean_deleted_threads(service_name, server_id, thread_ids)
+            thread_utils.clean_deleted_threads(SERVICE_NAME, server_id, thread_ids)
 
         print("✅ 存在しないサーバー/スレッドのチェックおよびクリーンアップを完了しました")
 
@@ -287,6 +481,6 @@ async def on_ready():
         print(f"❌ コマンド同期に失敗しました: {e}")
         await client.close()
 
-# Bot起動
+# ===== Bot 起動 =====
 def start_discord_bot():
     client.run(os.environ["DISCORD_BOT_TOKEN"])

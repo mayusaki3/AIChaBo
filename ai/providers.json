@@ -1,0 +1,32 @@
+{
+    "chat": {
+        "provider": "openai",
+        "models": [
+            { "name": "gpt-4o", "verified": true },
+            { "name": "gpt-4o-mini", "verified": false }
+        ],
+        "default": "gpt-4o"
+    },
+    "vision": {
+        "provider": "openai",
+        "models": [
+            { "name": "gpt-4o", "verified": true }
+        ],
+        "default": "gpt-4o"
+    },
+    "image": {
+        "provider": "openai",
+        "models": [
+            {
+                "name": "dall-e-3",
+                "verified": true,
+                "caps_file": "image_generate_caps_dall_e_3.json"
+            },
+            {
+                "name": "g3",
+                "verified": false
+            }
+        ],
+        "default": "dall-e-3"
+    }
+}

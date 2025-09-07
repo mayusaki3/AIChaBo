@@ -1,7 +1,7 @@
+# ui/discord/commands/ac_authunsharing.py
 import json
 import discord
 from discord import app_commands, Interaction
-from common.session.user_session_manager import user_session_manager
 from common.session.server_session_manager import server_session_manager
 
 HELP_TEXT = {

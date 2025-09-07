@@ -1,12 +1,13 @@
 import discord
 from discord import app_commands, Interaction, Thread
-from discord_handler import service_name
 from common.utils.thread_utils import remove_thread_from_server, is_thread_managed
 
 HELP_TEXT = {
     "usage": "/ac_leave",
     "description": "🧵スレッド内のみ: あいちゃぼを現在のスレッドから退出させます。"
 }
+
+SERVICE_NAME = "discord"
 
 @app_commands.command(name="ac_leave", description=HELP_TEXT["description"])
 async def ac_leave_command(interaction: Interaction):
@@ -16,7 +17,7 @@ async def ac_leave_command(interaction: Interaction):
         return
 
     thread = interaction.channel
-    if not is_thread_managed(service_name, interaction.guild_id, thread.id):
+    if not is_thread_managed(SERVICE_NAME, interaction.guild_id, thread.id):
         await interaction.followup.send("⚠️ あいちゃぼはこのスレッドに参加していません。", ephemeral=True)
         return
 
@@ -35,7 +36,7 @@ async def ac_leave_command(interaction: Interaction):
                 await interaction.followup.send("⚠️ あいちゃぼを退出させる権限がありません。", ephemeral=True)
                 return
 
-        remove_thread_from_server(service_name, interaction.guild_id, thread.id)
+        remove_thread_from_server(SERVICE_NAME, interaction.guild_id, thread.id)
         await interaction.followup.send("👋 あいちゃぼはスレッドから退出しました。", ephemeral=True)
 
     except Exception as e:
