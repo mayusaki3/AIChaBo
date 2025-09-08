@@ -142,6 +142,7 @@ AIChaBo は以下の /コマンドを提供しています：
 >| `-expprompt`        | 現在使用中のプロンプトを common/session/dump にエクスポート         |
 >| `-loadprompt`       | プロンプトを再読み込み                                              |
 >| `-printmsg:on/off`  | ONで、AIに投げるメッセージ内容をコンソールに出力                    |
+>| `-expmsg:on/off`    | ONで、AIに投げるメッセージ内容を common/session/dump に出力         |
 >| `-showopt`          | 設定されているオプションを表示                                      |
 >| `-tracetool:on/off` | ONで、AIが起動するツール内容をコンソールに出力                      |
 

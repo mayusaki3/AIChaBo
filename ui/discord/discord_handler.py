@@ -8,6 +8,8 @@ from discord import app_commands, Thread
 from discord.ext import commands
 from dotenv import load_dotenv
 from typing import List, Optional
+from pathlib import Path
+from datetime import datetime, timezone, timedelta
 
 # セッション/ユーティリティ
 from common.session.user_session_manager import user_session_manager
@@ -41,10 +43,17 @@ intents = discord.Intents.all()
 intents.members = True
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
+exp_lines = []
 
 SERVICE_NAME = "discord"
 
 # ====== ユーティリティ ======
+def _print(msg: str, printmsg: bool, expmsg: bool):
+    if printmsg:
+        print(msg)
+    if expmsg:
+        exp_lines.append(msg)
+
 def _provider_is_openai(p: str) -> bool:
     return str(p).strip().lower() == "openai"
 
@@ -222,23 +231,25 @@ async def on_message(message: discord.Message):
 
     # オプション
     printmsg = server_session_manager.get_option(guild_id, "printmsg", False)
+    expmsg = server_session_manager.get_option(guild_id, "expmsg", False)
+    exp_lines.clear()
     trace_tool = server_session_manager.get_option(guild_id, "tracetool", False)
-    max_tool_steps = server_session_manager.get_option(guild_id, "max_tool_steps", 10)
     tool_trace: List[str] = []
 
+    max_tool_steps = server_session_manager.get_option(guild_id, "max_tool_steps", 10)
     steps = 0
     while True:
         steps += 1
 
-        # オプション -printmsg:on 処理
-        if printmsg:
-            print("context_list =>")
+        # オプション -printmsg:on, -expmsg:on 処理
+        if printmsg or expmsg:
+            _print("context_list =>", printmsg, expmsg)
             for msg in context_list:
                 if msg.startswith("\s"):
                     out = msg.replace("\s", "system: ", 1)
-                    print(f"  \033[32m{out}\033[0m")
+                    _print(f"  \033[32m{out}\033[0m", printmsg, expmsg)
                 else:
-                    print(f"  \033[33m{msg}\033[0m")
+                    _print(f"  \033[33m{msg}\033[0m", printmsg, expmsg)
 
         # ===== LLM 呼び出し → Action 実行ループ =====
         reply = ""
@@ -255,9 +266,9 @@ async def on_message(message: discord.Message):
                         auth_data["chat"].get("max_tokens", 2048)
                     )
 
-            # オプション -printmsg:on 処理
-            if printmsg:
-                print(f"reply => \033[36m{reply}\033[0m")
+            # オプション -printmsg:on, -expmsg:on 処理
+            if printmsg or expmsg:
+                _print(f"reply => \033[36m{reply}\033[0m", printmsg, expmsg)
 
             # Action 解析
             action = (
@@ -274,9 +285,9 @@ async def on_message(message: discord.Message):
             tool_name = action.tool
             tool_trace.append(tool_name)
 
-            # オプション -printmsg:on 処理
-            if printmsg and action:
-                print(f"action => \033[35m{action.tool}\033[0m")
+            # オプション -printmsg:on, -expmsg:on 処理
+            if (printmsg or expmsg) and action:
+                _print(f"action => \033[35m{action.tool}\033[0m", printmsg, expmsg)
 
             # 画像生成 ==========
             if action.tool == "image.generate":
@@ -349,8 +360,8 @@ async def on_message(message: discord.Message):
 
                 # 検索結果を会話に追記して、必要ならもう一度 LLM へ
                 context_list.append(result)
-                if printmsg:
-                    print(f"websearch result => \033[35m{result}\033[0m")
+                if printmsg or expmsg:
+                    _print(f"websearch result => \033[35m{result}\033[0m", printmsg, expmsg)
                 # ループ継続（次のプロンプトでアクションが返らなくなるまで）
                 if steps >= max_tool_steps:
 	                # オプション -tracetool:on 処理
@@ -407,6 +418,17 @@ async def on_message(message: discord.Message):
     if reply:
         reply = reply.replace("あいちゃぼ: ", "", 1)
         await message.channel.send(reply)
+
+    # オプション -expmsg:on 処理
+    if expmsg:
+        try:
+            out_dir = Path("common/session/dump")
+            out_dir.mkdir(parents=True, exist_ok=True)
+            ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+            out_path = out_dir / f"message_{thread.id}_{message.author.id}_{ts}.txt"
+            out_path.write_text("\n".join(exp_lines) + "\n", encoding="utf-8", errors="ignore")
+        except Exception:
+            pass
 
     # オプション -tracetool:on 処理
     if trace_tool:
