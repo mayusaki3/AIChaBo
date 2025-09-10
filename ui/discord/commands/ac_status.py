@@ -232,7 +232,7 @@ async def ac_status_command(interaction: Interaction, option: str = None):
         out_path.write_text(merged, encoding="utf-8")
 
         suffix = "（空ファイル）" if not merged.strip() else ""
-        export_msgs.append(f"📝 プロンプト/スキーマをエクスポートしました。`{out_path.as_posix()}`{suffix}")
+        export_msgs.append(f"📝 現在使用しているプロンプト/スキーマをエクスポートしました。")
 
     if export_msgs:
         msg_lines.append("")

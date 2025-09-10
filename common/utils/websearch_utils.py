@@ -10,11 +10,12 @@ class WebSearchError(Exception):
 # DuckDuckGo検索（duckduckgo-search 依存）。
 # - 同期版 DDGS をスレッド実行
 # 戻り値: [{title, url, snippet, source}]
-async def _search_duckduckgo(query: str, *, top: int, timelimit: Optional[str], lang: Optional[str], timeout: int) -> List[Dict]:
+async def _search_duckduckgo(query: str, *, top: int, timelimit: Optional[str], lang: Optional[str], region: Optional[str], timeout: int) -> List[Dict]:
     from duckduckgo_search import DDGS  # v5〜v8
     import asyncio
     loop = asyncio.get_running_loop()
-    region = ddg_region_for_lang(lang)
+    if not region:
+        region = ddg_region_for_lang(lang)
 
     def _sync_search():
         out: List[Dict] = []
@@ -53,6 +54,7 @@ async def search_web(
     top_result: int = 5,
     recency_days: Optional[int] = None,
     lang: Optional[str] = None,
+    region: Optional[str] = None,
     timeout: int = 15,
 ) -> List[Dict]:
     # クエリ配列に正規化
@@ -75,7 +77,7 @@ async def search_web(
     seen_urls: set[str] = set()
 
     for q in qs:
-        results = await _search_duckduckgo(q, top=top, timelimit=timelimit, lang=lang, timeout=timeout)
+        results = await _search_duckduckgo(q, top=top, timelimit=timelimit, lang=lang, region=region, timeout=timeout)
 
         for r in results:
             url = r.get("url") or ""

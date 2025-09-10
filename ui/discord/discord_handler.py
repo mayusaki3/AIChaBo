@@ -14,6 +14,7 @@ from datetime import datetime, timezone, timedelta
 # セッション/ユーティリティ
 from common.session.user_session_manager import user_session_manager
 from common.session.server_session_manager import server_session_manager
+from common.session.capabilities_loader import load_image_caps, normalize_image_params
 from common.utils import thread_utils
 from common.utils.thread_utils import remove_thread_from_server, is_thread_managed
 from common.utils.websearch_utils import search_web, format_results_as_markdown
@@ -46,13 +47,28 @@ tree = app_commands.CommandTree(client)
 exp_lines = []
 
 SERVICE_NAME = "discord"
+ANSI_RE = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
 
 # ====== ユーティリティ ======
+def _chunks(seq, n):
+    for i in range(0, len(seq), n):
+        yield seq[i:i+n]
+ 
+class _SafeDict(dict):
+    def __missing__(self, k):
+        return "{" + k + "}"
+ 
+def _fmt(t: str, **kw) -> str:
+    try:
+        return (t or "").format_map(_SafeDict(kw))
+    except Exception:
+        return t or ""
+
 def _print(msg: str, printmsg: bool, expmsg: bool):
     if printmsg:
         print(msg)
     if expmsg:
-        exp_lines.append(msg)
+        exp_lines.append(ANSI_RE.sub('', msg))
 
 def _provider_is_openai(p: str) -> bool:
     return str(p).strip().lower() == "openai"
@@ -235,6 +251,7 @@ async def on_message(message: discord.Message):
     exp_lines.clear()
     trace_tool = server_session_manager.get_option(guild_id, "tracetool", False)
     tool_trace: List[str] = []
+    pending_files: List[discord.File] = []
 
     max_tool_steps = server_session_manager.get_option(guild_id, "max_tool_steps", 10)
     steps = 0
@@ -294,46 +311,58 @@ async def on_message(message: discord.Message):
 
                 # OpenAIの場合
                 if _provider_is_openai(auth_data["imagegen"]["provider"]):
-                    # LLM 指定のメッセージ置換ヘルパ
-                    def _fmt(template: Optional[str], error: Exception | None = None) -> str:
-                        t = (template or "").strip()
-                        if not t:
-                            return ""
-                        subst = {
-                            "n": str(getattr(action, "n", 1)),
-                            "size": action.size or auth_data["imagegen"].get("size", "1024x1024"),
-                           "error": (str(error) if error else ""),
-                        }
-                        for k, v in subst.items():
-                            t = t.replace("{"+k+"}", v)
-                        return t
-
                     try:
                         async with message.channel.typing():
-                            img_bytes = await generate_image_from_prompt(
-                                prompt=action.prompt,
-                                api_key=auth_data["imagegen"]["api_key"],
-                                model=auth_data["imagegen"]["model"],
-                                size=auth_data["imagegen"].get("size", "1024x1024"),
-                                quality=auth_data["imagegen"].get("quality", "standard"),
-                                timeout_sec=90
+                            # ← generate_image_from_prompt は n 非対応なのでループで作成
+                            caps = load_image_caps(auth_data["imagegen"]["provider"], auth_data["imagegen"]["model"])
+                            n_req, size, quality, warns = normalize_image_params(
+                                action, caps,
+                                fallback_sizes=["256x256","512x512","1024x1024"],
+                                fallback_max_n=8,
+                                fallback_quality=auth_data["imagegen"].get("quality","standard"),
+                                passthrough_when_no_caps=True,  # cap無し時は従来通りの“変換なし”
                             )
-                            # 添付送信
-                            file = discord.File(fp=io.BytesIO(img_bytes), filename="aichabo_image.png")
-                            await message.channel.send(
-                                content=action.success_message,
-                                file=file
+                            # オプション -printmsg:on, -expmsg:on 処理
+                            if printmsg or expmsg:
+                                for w in (warns or []):
+                                    _print(f"[image.caps] {w}", printmsg, expmsg)
+                            for i in range(n_req):
+                                img_bytes = await generate_image_from_prompt(
+                                    prompt=action.prompt,
+                                    api_key=auth_data["imagegen"]["api_key"],
+                                    model=auth_data["imagegen"]["model"],
+                                    size=size,
+                                    quality=quality,
+                                    timeout_sec=90
+                                )
+                                pending_files.append(
+                                    discord.File(fp=io.BytesIO(img_bytes), filename=f"aichabo_image_{i+1}.png")
+                                )
+
+                            # 成功メッセージ（実際に生成できた枚数で置換）
+                            msg = action.success_message or "画像を{n}枚生成しました。"
+                            msg += f"\nサイズ: {size}"
+                            msg += f"\nプロンプト:\n{action.prompt}"
+                            reply = _fmt(
+                                msg,
+                                n=len(pending_files), size=size
                             )
+                            # オプション -printmsg:on, -expmsg:on 処理
+                            if printmsg or expmsg:
+                                _print(
+                                    f"[tool] image.generate ok: count={len(pending_files)} size={size} model={auth_data['imagegen']['model']}",
+                                    printmsg, expmsg
+                                )
+
                     except Exception as e:
-                        # 画像生成だけ失敗しても会話は続行できるよう、ここで握りつぶして通知のみ
-                        await message.channel.send(f"{action.failure_message}: {e}")
+                        reply = _fmt(action.failure_message or "画像生成に失敗しました：{error}", error=e)
 
                 # オプション -tracetool:on 処理
                 if trace_tool:
                     chain = " → ".join(tool_trace + ["response"])
                     print(f"[trace] {chain}")
 
-                return
+                break
 
             # WEB検索 ==========
             if action.tool == "web.search":
@@ -360,8 +389,11 @@ async def on_message(message: discord.Message):
 
                 # 検索結果を会話に追記して、必要ならもう一度 LLM へ
                 context_list.append(result)
+
+                # オプション -printmsg:on, -expmsg:on 処理
                 if printmsg or expmsg:
                     _print(f"websearch result => \033[35m{result}\033[0m", printmsg, expmsg)
+
                 # ループ継続（次のプロンプトでアクションが返らなくなるまで）
                 if steps >= max_tool_steps:
 	                # オプション -tracetool:on 処理
@@ -415,9 +447,24 @@ async def on_message(message: discord.Message):
         break
 
     # ===== 通常レスポンス送信 =====
-    if reply:
-        reply = reply.replace("あいちゃぼ: ", "", 1)
-        await message.channel.send(reply)
+    if reply or pending_files:
+        # オプション -printmsg:on, -expmsg:on 処理
+        if printmsg or expmsg:
+            _print(f"response => {(reply or '').strip()} [attachments={len(pending_files)}]", printmsg, expmsg)
+        # モデルの癖で先頭に「 あいちゃぼ: 」が入った場合を除去
+        if reply:
+            reply = reply.replace("あいちゃぼ: ", "", 1)
+        # 添付が10ファイルを超える場合は10ファイルずつ分割送信（1通目に本文を付ける）
+        if pending_files:
+            first = True
+            for chunk in _chunks(pending_files, 10):
+                if first:
+                    await message.channel.send(content=(reply or None), files=chunk)
+                    first = False
+                else:
+                    await message.channel.send(files=chunk)
+        else:
+            await message.channel.send(reply)
 
     # オプション -expmsg:on 処理
     if expmsg:

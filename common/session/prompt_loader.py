@@ -132,20 +132,23 @@ def _collect_paths(provider: str) -> Dict[str, object]:
     out["tools"] = tool_paths
     return out
 
-def _schema_for_tool_fname(fname: str) -> Optional[str]:
-    mapping = {
-        "web_search.txt": WebSearchAction,
-        "web_read.txt": WebReadAction,
-        "image_generate.txt": ImageGenAction,
-        "web_image.txt": WebImageAction,
-    }
-    cls = mapping.get(fname)
-    if not cls or not hasattr(cls, "json_schema"):
-        return None
-    try:
-        return json.dumps(cls.json_schema(), ensure_ascii=False, indent=2)  # type: ignore
-    except Exception:
-        return None
+def _schema_for_tool_fname(fname: str) -> str:
+    """
+    見つかったファイルを厳格にロードして返す。
+    見つからない／壊れている場合は空にする。
+    """
+    base = Path(fname).stem  # e.g. "web_search"
+    p = Path("common")/"actions"/"json_schemas"/f"{base}_schema.json"
+    if p.exists():
+        raw = _read_text(p)
+        try:
+            obj = json.loads(raw)  # JSONとして正しいか検証
+        except Exception as e:
+            print(f"スキーマのJSON構文エラー: {p.as_posix()} : {e}")
+            return ""
+        return json.dumps(obj, ensure_ascii=False, indent=2)
+    print(f"スキーマが見つかりません: {p.as_posix()}")
+    return ""
 
 def _normalize_provider(name: Optional[str]) -> str:
     """認証に入っている provider 名をディレクトリ名へ正規化"""
@@ -229,8 +232,8 @@ def _build_parts(role: str, provider: str) -> Tuple[dict, Dict[str, float]]:
                 tails.append(body)
             schema_json = _schema_for_tool_fname(tp.name)
             if schema_json:
-                tails.append(f"```json\n{schema_json}\n```")
-    tail = "\n\n".join([t for t in tails if t and t.strip()])
+                tails.append(f"{schema_json}\n\n")
+    tail = "\n".join([t for t in tails if t and t.strip()])
 
     return {"head": head, "inj": inj, "tail": tail}
 
