@@ -317,13 +317,20 @@ async def on_message(message: discord.Message):
                             caps = load_image_caps(auth_data["imagegen"]["provider"], auth_data["imagegen"]["model"])
                             n_req, size, quality, warns = normalize_image_params(
                                 action, caps,
-                                fallback_sizes=["256x256","512x512","1024x1024"],
-                                fallback_max_n=8,
+                                fallback_sizes=["1024x1024"],
+                                fallback_max_n=4,
                                 fallback_quality=auth_data["imagegen"].get("quality","standard"),
                                 passthrough_when_no_caps=True,  # cap無し時は従来通りの“変換なし”
                             )
                             # オプション -printmsg:on, -expmsg:on 処理
                             if printmsg or expmsg:
+                                allowed_qualities = caps.get("qualities") or caps.get("allowed_qualities") or []
+                                if isinstance(allowed_qualities, str):
+                                    allowed_qualities = [allowed_qualities]
+                                _print(
+                                    "[image.caps] allowed qualities: " + (", ".join(allowed_qualities) if allowed_qualities else "(none)"),
+                                    printmsg, expmsg
+                                )
                                 for w in (warns or []):
                                     _print(f"[image.caps] {w}", printmsg, expmsg)
                             for i in range(n_req):
@@ -341,6 +348,7 @@ async def on_message(message: discord.Message):
 
                             # 成功メッセージ（実際に生成できた枚数で置換）
                             msg = action.success_message or "画像を{n}枚生成しました。"
+                            msg = re.sub(r"\b\d{2,5}\s*x\s*\d{2,5}\b", size, msg)
                             msg += f"\nサイズ: {size}"
                             msg += f"\nプロンプト:\n{action.prompt}"
                             reply = _fmt(

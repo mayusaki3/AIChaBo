@@ -1,6 +1,7 @@
 import json
 import discord
 from discord import app_commands, Interaction
+from common.utils import jsonc
 
 from common.session.user_session_manager import user_session_manager
 # プロンプトの読み込みを /ac_auth 成功時に実行
@@ -18,124 +19,6 @@ HELP_TEXT = {
     "usage": "/ac_auth <file>",
     "description": "あいちゃぼが使用するAIチャットの認証情報を登録します。"
 }
-
-# --------------------------
-# JSONC → JSON 変換ヘルパー
-# --------------------------
-def _jsonc_to_json(text: str) -> str:
-    """
-    JSONC (//, /* */ コメント と 末尾カンマ) を除去して純 JSON にする。
-    - 文字列リテラル内は保護
-    """
-    s = text.replace("\r\n", "\n").replace("\r", "\n")
-
-    out_chars = []
-    in_str = False
-    str_quote = ""
-    esc = False
-    in_line = False
-    in_block = False
-
-    i = 0
-    n = len(s)
-    while i < n:
-        ch = s[i]
-        nxt = s[i + 1] if i + 1 < n else ""
-
-        if in_line:
-            if ch == "\n":
-                in_line = False
-                out_chars.append(ch)
-            # 行コメント中は捨てる（改行のみ通す）
-            i += 1
-            continue
-
-        if in_block:
-            if ch == "*" and nxt == "/":
-                in_block = False
-                i += 2
-            else:
-                i += 1
-            continue
-
-        if in_str:
-            out_chars.append(ch)
-            if esc:
-                esc = False
-            elif ch == "\\":
-                esc = True
-            elif ch == str_quote:
-                in_str = False
-            i += 1
-            continue
-
-        # ここから「文字列外」
-        # コメント開始判定
-        if ch == "/" and nxt == "/":
-            in_line = True
-            i += 2
-            continue
-        if ch == "/" and nxt == "*":
-            in_block = True
-            i += 2
-            continue
-
-        # 文字列開始
-        if ch in ("'", '"'):
-            in_str = True
-            str_quote = ch
-            out_chars.append(ch)
-            i += 1
-            continue
-
-        out_chars.append(ch)
-        i += 1
-
-    # 末尾カンマ除去：']' '}' 直前の不要カンマを安全に削除（文字列外のみ）
-    # 2 パス目：シンプルに後ろから走査して、]や}の前にあるカンマを空白スキップで剥がす
-    chars = out_chars
-    i = 0
-    out2 = []
-    stack = []  # 文字列外のみ扱うのでここでは不要だが、将来拡張の余地として残す
-    while i < len(chars):
-        ch = chars[i]
-        if ch in ("'", '"'):
-            # 文字列はそのままコピー（簡単な保護）
-            q = ch
-            out2.append(ch)
-            i += 1
-            esc = False
-            while i < len(chars):
-                c = chars[i]
-                out2.append(c)
-                if esc:
-                    esc = False
-                elif c == "\\":
-                    esc = True
-                elif c == q:
-                    i += 1
-                    break
-                i += 1
-            continue
-
-        if ch in ("]", "}"):
-            # 直前の空白とカンマを見て、カンマなら飛ばす
-            j = len(out2) - 1
-            # 空白スキップ
-            while j >= 0 and out2[j] in (" ", "\t", "\n"):
-                j -= 1
-            if j >= 0 and out2[j] == ",":
-                # カンマを削除
-                out2.pop(j)
-                # その後ろにあった空白はそのまま維持
-            out2.append(ch)
-            i += 1
-            continue
-
-        out2.append(ch)
-        i += 1
-
-    return "".join(out2)
 
 def _normalize_provider(name: str) -> str:
     n = (name or "").strip().lower()
@@ -178,8 +61,7 @@ async def ac_auth_command(interaction: Interaction, file: discord.Attachment):
 
         # JSONC → JSON
         try:
-            content = _jsonc_to_json(text)
-            auth_json = json.loads(content)
+            auth_json = jsonc.loads_jsonc(text)
         except Exception as e:
             await interaction.followup.send(f"❌ JSONC/JSON の読み込みに失敗しました: {e}", ephemeral=True)
             return

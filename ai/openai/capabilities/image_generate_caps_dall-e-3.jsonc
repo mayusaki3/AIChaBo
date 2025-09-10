@@ -1,0 +1,11 @@
+{
+  "provider": "openai",
+  "model": "dall-e-3",
+  "sizes": ["1024x1024", "1024x1792", "1792x1024"],
+  "default_size": "1024x1024",
+  "size_strategy": "nearest_by_area_then_order",
+  "max_n": 1,
+  "qualities": ["standard"],
+  "default_quality": "standard",
+  "supports": { "transparent_background": false }
+}
