@@ -1,15 +1,12 @@
 import os
 import io
 import re
-import base64
-import aiohttp
 import discord
 from discord import app_commands, Thread
-from discord.ext import commands
 from dotenv import load_dotenv
-from typing import List, Optional
+from typing import List, Optional, Callable, Tuple
 from pathlib import Path
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 
 # セッション/ユーティリティ
 from common.session.user_session_manager import user_session_manager
@@ -23,6 +20,8 @@ from ui.discord.discord_thread_context import context_manager
 
 # AI/アクション
 from ai.openai.openai_api import call_chatgpt, generate_image_from_prompt
+from ai.gemini.gemini_api import call_gemini_chat, generate_gemini_image
+from ai.claude.claude_api import call_claude_chat
 from common.actions.imagegen_action import ImageGenAction
 from common.actions.websearch_action import WebSearchAction
 from common.actions.webread_action import WebReadAction
@@ -48,8 +47,77 @@ exp_lines = []
 
 SERVICE_NAME = "discord"
 ANSI_RE = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
+DISCORD_MSG_LIMIT = 2000
 
 # ====== ユーティリティ ======
+
+# provider -> 画像生成関数マップ（bytes を返す関数）
+IMAGEGEN_GENERATORS: dict[str, Callable[..., "awaitable[bytes]"]] = {
+    "OpenAI": generate_image_from_prompt,   # 既存
+    "Gemini": generate_gemini_image,        # 既存
+    # "Claude": 画像生成は非対応（エラーを返す or マップしない）
+}
+
+async def _run_imagegen_common(
+    *, provider: str, api_key: str, model: str,
+    action,  # ImageGenAction
+    imagegen_cfg: dict,
+    printmsg: bool, expmsg: bool
+) -> Tuple[str, list[discord.File]]:
+    """
+    capabilities を読み、n/size/quality を正規化 → 画像を n 枚生成 → 成功メッセージを返す。
+    戻り値: (reply_message, files)
+    例外は上位で握る（既存の try/except に任せる）。
+    """
+    caps = load_image_caps(provider, model)
+    n_req, size, quality, warns = normalize_image_params(
+        action, caps,
+        fallback_sizes=["1024x1024"],
+        fallback_max_n=4,
+        fallback_quality=imagegen_cfg.get("quality", "standard"),
+        passthrough_when_no_caps=True,
+    )
+
+    # ログ（任意）
+    if printmsg or expmsg:
+        allowed_qualities = caps.get("qualities") or caps.get("allowed_qualities") or []
+        if isinstance(allowed_qualities, str):
+            allowed_qualities = [allowed_qualities]
+        _print(
+            "[image.caps] allowed qualities: " + (", ".join(allowed_qualities) if allowed_qualities else "(none)"),
+            printmsg, expmsg
+        )
+        for w in (warns or []):
+            _print(f"[image.caps] {w}", printmsg, expmsg)
+
+    gen_fn = IMAGEGEN_GENERATORS.get(provider)
+    if not gen_fn:
+        # Claude など未対応
+        raise RuntimeError(f"画像生成は {provider} では未対応です。")
+
+    files: list[discord.File] = []
+    for i in range(n_req):
+        img_bytes = await gen_fn(
+            prompt=action.prompt,
+            api_key=api_key,
+            model=model,
+            size=size,
+            quality=quality,
+            timeout_sec=90
+        )
+        files.append(discord.File(fp=io.BytesIO(img_bytes), filename=f"aichabo_image_{i+1}.png"))
+
+    # 成功メッセージ生成（既存ロジックをそのまま共通化）
+    msg = action.success_message or "画像を{n}枚生成しました。"
+    # 表示用にサイズ文字（例: 1024x1024）を埋め込み
+    import re as _re
+    msg = _re.sub(r"\b\d{2,5}\s*x\s*\d{2,5}\b", size, msg)
+    msg += f"\nサイズ: {size}"
+    msg += f"\nプロンプト:\n{action.prompt}"
+    reply = _fmt(msg, n=len(files), size=size)
+
+    return reply, files
+
 def _chunks(seq, n):
     for i in range(0, len(seq), n):
         yield seq[i:i+n]
@@ -69,9 +137,6 @@ def _print(msg: str, printmsg: bool, expmsg: bool):
         print(msg)
     if expmsg:
         exp_lines.append(ANSI_RE.sub('', msg))
-
-def _provider_is_openai(p: str) -> bool:
-    return str(p).strip().lower() == "openai"
 
 async def _fetch_reply_source(message: discord.Message) -> Optional[discord.Message]:
     if message.reference and message.reference.message_id:
@@ -118,6 +183,53 @@ def _format_reply_context(src: discord.Message, *, max_chars: int = 800) -> str:
         for u in urls[:8]:
             lines.append(f"- {u}")
     return "\n".join(lines)
+
+def _split_for_discord(text: str, limit: int = DISCORD_MSG_LIMIT) -> list[str]:
+    """Discordの本文上限に合わせて安全に分割（簡易にコードブロックも保護）"""
+    if not text:
+        return []
+    if len(text) <= limit:
+        return [text]
+
+    chunks, buf, in_code = [], "", False
+    for line in text.splitlines(keepends=True):
+        # コードブロック境界検出
+        if line.strip().startswith("```"):
+            fence = True
+        else:
+            fence = False
+
+        # 追加したらオーバーする？
+        if len(buf) + len(line) > limit:
+            # 開いたままなら一旦閉じて送る
+            if in_code:
+                to_send = buf + ("```" if not buf.rstrip().endswith("```") else "")
+                chunks.append(to_send[:limit])
+                buf = "```"  # 次の塊は再オープンから
+            else:
+                chunks.append(buf)
+                buf = ""
+        buf += line
+
+        # フェンスでトグル
+        if fence:
+            in_code = not in_code
+
+    if buf:
+        # 最終チャンクの閉じ忘れ防止
+        if in_code and not buf.rstrip().endswith("```"):
+            buf += "\n```"
+        chunks.append(buf)
+
+    # 念のため二段階で長すぎる塊を切る（非常時）
+    out = []
+    for c in chunks:
+        if len(c) <= limit:
+            out.append(c)
+        else:
+            for i in range(0, len(c), limit):
+                out.append(c[i:i+limit])
+    return out
 
 # ====== メッセージ処理（AIスレッド） ======
 @client.event
@@ -283,6 +395,26 @@ async def on_message(message: discord.Message):
                         auth_data["chat"].get("max_tokens", 2048)
                     )
 
+            # Geminiの場合
+            if auth_data["chat"]["provider"] == "Gemini":
+                async with message.channel.typing():
+                    reply = await call_gemini_chat(
+                        context_list,
+                        auth_data["chat"]["api_key"],
+                        auth_data["chat"]["model"],
+                        auth_data["chat"].get("max_tokens", 2048)
+                    )
+
+            # Claudeの場合
+            if auth_data["chat"]["provider"] == "Claude":
+                async with message.channel.typing():
+                    reply = await call_claude_chat(
+                        context_list,
+                        auth_data["chat"]["api_key"],
+                        auth_data["chat"]["model"],
+                        auth_data["chat"].get("max_tokens", 2048)
+                    )
+
             # オプション -printmsg:on, -expmsg:on 処理
             if printmsg or expmsg:
                 _print(f"reply => \033[36m{reply}\033[0m", printmsg, expmsg)
@@ -308,62 +440,25 @@ async def on_message(message: discord.Message):
 
             # 画像生成 ==========
             if action.tool == "image.generate":
-
-                # OpenAIの場合
-                if _provider_is_openai(auth_data["imagegen"]["provider"]):
-                    try:
-                        async with message.channel.typing():
-                            # ← generate_image_from_prompt は n 非対応なのでループで作成
-                            caps = load_image_caps(auth_data["imagegen"]["provider"], auth_data["imagegen"]["model"])
-                            n_req, size, quality, warns = normalize_image_params(
-                                action, caps,
-                                fallback_sizes=["1024x1024"],
-                                fallback_max_n=4,
-                                fallback_quality=auth_data["imagegen"].get("quality","standard"),
-                                passthrough_when_no_caps=True,  # cap無し時は従来通りの“変換なし”
-                            )
-                            # オプション -printmsg:on, -expmsg:on 処理
-                            if printmsg or expmsg:
-                                allowed_qualities = caps.get("qualities") or caps.get("allowed_qualities") or []
-                                if isinstance(allowed_qualities, str):
-                                    allowed_qualities = [allowed_qualities]
-                                _print(
-                                    "[image.caps] allowed qualities: " + (", ".join(allowed_qualities) if allowed_qualities else "(none)"),
-                                    printmsg, expmsg
-                                )
-                                for w in (warns or []):
-                                    _print(f"[image.caps] {w}", printmsg, expmsg)
-                            for i in range(n_req):
-                                img_bytes = await generate_image_from_prompt(
-                                    prompt=action.prompt,
-                                    api_key=auth_data["imagegen"]["api_key"],
-                                    model=auth_data["imagegen"]["model"],
-                                    size=size,
-                                    quality=quality,
-                                    timeout_sec=90
-                                )
-                                pending_files.append(
-                                    discord.File(fp=io.BytesIO(img_bytes), filename=f"aichabo_image_{i+1}.png")
-                                )
-
-                            # 成功メッセージ（実際に生成できた枚数で置換）
-                            msg = action.success_message or "画像を{n}枚生成しました。"
-                            msg = re.sub(r"\b\d{2,5}\s*x\s*\d{2,5}\b", size, msg)
-                            msg += f"\nサイズ: {size}"
-                            msg += f"\nプロンプト:\n{action.prompt}"
-                            reply = _fmt(
-                                msg,
-                                n=len(pending_files), size=size
-                            )
-                            # オプション -printmsg:on, -expmsg:on 処理
-                            if printmsg or expmsg:
-                                _print(
-                                    f"[tool] image.generate ok: count={len(pending_files)} size={size} model={auth_data['imagegen']['model']}",
-                                    printmsg, expmsg
-                                )
-
-                    except Exception as e:
-                        reply = _fmt(action.failure_message or "画像生成に失敗しました：{error}", error=e)
+                try:
+                    async with message.channel.typing():
+                        provider = auth_data["imagegen"]["provider"]
+                        model    = auth_data["imagegen"]["model"]
+                        api_key  = auth_data["imagegen"]["api_key"]
+                        reply, new_files = await _run_imagegen_common(
+                            provider=provider,
+                            api_key=api_key,
+                            model=model,
+                            action=action,
+                            imagegen_cfg=auth_data["imagegen"],
+                            printmsg=printmsg, expmsg=expmsg
+                        )
+                        pending_files.extend(new_files)
+                        if printmsg or expmsg:
+                            _print(f"[tool] image.generate ok: count={len(new_files)} size={new_files and 'see msg'} model={model}",
+                                   printmsg, expmsg)
+                except Exception as e:
+                    reply = _fmt(action.failure_message or "画像生成に失敗しました：{error}", error=e)
 
                 # オプション -tracetool:on 処理
                 if trace_tool:
@@ -473,17 +568,29 @@ async def on_message(message: discord.Message):
         # モデルの癖で先頭に「 あいちゃぼ: 」が入った場合を除去
         if reply:
             reply = reply.replace("あいちゃぼ: ", "", 1)
-        # 添付が10ファイルを超える場合は10ファイルずつ分割送信（1通目に本文を付ける）
+        text_chunks = _split_for_discord(reply or "", limit=DISCORD_MSG_LIMIT)
+        # 添付がある場合：1通目に本文(先頭チャンク)＋最初の添付群、以降は本文/添付を順次
         if pending_files:
-            first = True
-            for chunk in _chunks(pending_files, 10):
-                if first:
-                    await message.channel.send(content=(reply or None), files=chunk)
-                    first = False
-                else:
-                    await message.channel.send(files=chunk)
+            file_chunks = list(_chunks(pending_files, 10))
+            # 1通目
+            first_text = (text_chunks[0] if text_chunks else None) or None
+            await message.channel.send(content=first_text, files=file_chunks[0])
+            # 残りの本文
+            for t in (text_chunks[1:] if text_chunks else []):
+                await message.channel.send(t)
+            # 残りの添付
+            for fc in file_chunks[1:]:
+                await message.channel.send(files=fc)
         else:
-            await message.channel.send(reply)
+            # 添付なし：本文をチャンクごとに送信
+            # 空文字は送らない
+            if text_chunks:
+                for t in text_chunks:
+                    if t:
+                        await message.channel.send(t)
+            else:
+                # 何も返すものが無ければ何もしない
+                pass
 
     # オプション -expmsg:on 処理
     if expmsg:

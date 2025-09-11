@@ -49,11 +49,13 @@ pip install -r requirements.txt
 requirements.txt に含まれる主なライブラリ:
 
 - python-dotenv
-- requests>=2.25.1
-- discord.py (>=2.3.2)
-- aiohttp (>=3.12,<4)
-- openai (>=1.0.0)
+- discord.py>=2.3.2
+- aiohttp>=3.12,<4
 - duckduckgo-search>=5.3.0
+- ddgs
+- openai>=1.0.0
+- google-generativeai
+- anthropic
 
 ```shell
 cp .env.example .env
@@ -169,7 +171,22 @@ AIChaBo は以下の /コマンドを提供しています：
     5. 必要に応じて利用するチャットモデルをJSONファイル の 各"model": に貼り付け
     6. 必要に応じて以下のリンクよりログインしてBillingより支払方法や使用制限を設定
        https://platform.openai.com/account/billing
-    
+
+    ### 🔹 Gemini API Key の取得手順（Google AI Studio 直API）
+    1. Google AI Studio にログインし、API Keys ページを開きます。
+    2. 「Create API key」をクリックして発行・コピー。
+    3. 表示されたキーをコピー
+    4. /ac_template コマンドでダウンロードした JSONファイル の 各"api_key": に貼り付け
+    🔒 注意：このAPIキーは絶対に外部に公開しないでください。
+    5. 必要に応じて利用するチャットモデルをJSONファイル の 各"model": に貼り付け
+
+    ### 🔹 Claude API Key の取得手順（Anthropic 直API）
+    1. Anthropic Console にログインします。
+    2. Console の Account / API Keys で Create Key を実行し、表示されたキーをコピーします。
+    3. /ac_template コマンドでダウンロードした JSONファイル の 各"api_key": に貼り付け
+    🔒 注意：このAPIキーは絶対に外部に公開しないでください。
+    4. 必要に応じて利用するチャットモデルをJSONファイル の 各"model": に貼り付け
+
 3. 利用するAIチャットのファイルを `/ac_auth` コマンドでアップロードします。  
    AIチャットを切り替える場合は、別のファイルをアップロードします。
 

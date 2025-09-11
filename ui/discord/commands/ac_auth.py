@@ -7,12 +7,23 @@ from common.session.user_session_manager import user_session_manager
 # プロンプトの読み込みを /ac_auth 成功時に実行
 from common.session.prompt_loader import load_for_ctx, AuthNotConfigured
 
-# 既存の OpenAI 検証ユーティリティ（現状は OpenAI のみ対応）
+# OpenAI / Gemini / Claude 検証ユーティリティ
 from ai.openai.validator import (
     is_valid_openai_key,
     is_openai_chat_model_available,
     is_openai_vision_model_available,
     is_openai_imagegen_model_available,
+)
+from ai.gemini.validator import (
+    is_valid_gemini_key,
+    is_gemini_chat_model_available,
+    is_gemini_vision_model_available,
+    is_gemini_imagegen_model_available,
+)
+from ai.claude.validator import (
+    is_valid_claude_key,
+    is_claude_chat_model_available,
+    is_claude_vision_model_available,
 )
 
 HELP_TEXT = {
@@ -22,15 +33,13 @@ HELP_TEXT = {
 
 def _normalize_provider(name: str) -> str:
     n = (name or "").strip().lower()
-    if n in ("openai", "oai", "gpt"):
+    if n in ("openai"):
         return "openai"
-    if n in ("google", "gemini", "g"):
-        return "google"
-    if n in ("anthropic", "claude", "a"):
+    if n in ("google", "gemini"):
+        return "gemini"
+    if n in ("anthropic", "claude"):
         return "claude"
-    if n in ("default",):
-        return "default"
-    return n or "default"
+    return n
 
 def _require_fields(section: dict, fields: list[str], prefix: str) -> list[str]:
     missing = []
@@ -96,48 +105,102 @@ async def ac_auth_command(interaction: Interaction, file: discord.Attachment):
         vision_provider = _normalize_provider(auth_json["vision"]["provider"])
         image_provider  = _normalize_provider(auth_json["imagegen"]["provider"])
 
-        # ---------------- 実アカウント検証（現状 OpenAI のみ） ----------------
+        # ---------------- 実アカウント検証 ----------------
         try:
             # Chat
-            if chat_provider != "openai":
-                raise ValueError("provider(chat) unsupported")
             chat_key   = auth_json["chat"]["api_key"].strip()
             chat_model = auth_json["chat"]["model"].strip()
-            if (await is_valid_openai_key(chat_key)) is not True:
-                await interaction.followup.send("❌ Chat 用の API キーは利用できません。", ephemeral=True)
-                return
-            if not await is_openai_chat_model_available(chat_key, chat_model):
-                await interaction.followup.send(f"❌ Chat モデル `{chat_model}` は利用できません。", ephemeral=True)
-                return
+            if chat_provider == "openai":
+                result = await is_valid_openai_key(chat_key)
+                if result is not True:
+                    await interaction.followup.send(f"❌ Chat用のAPIキーは利用できません。\n{result}", ephemeral=True)
+                    return
+                result = await is_openai_chat_model_available(chat_key, chat_model)
+                if result is not True:
+                    await interaction.followup.send(f"❌ Chatモデル `{chat_model}` は利用できません。\n{result}", ephemeral=True)
+                    return
+            elif chat_provider == "gemini":
+                result = await is_valid_gemini_key(chat_key)
+                if result is not True:
+                    await interaction.followup.send(f"❌ Chat用のAPIキーは利用できません。\n{result}", ephemeral=True)
+                    return
+                result = await is_gemini_chat_model_available(chat_key, chat_model)
+                if result is not True:
+                    await interaction.followup.send(f"❌ Chatモデル `{chat_model}` は利用できません。\n{result}", ephemeral=True)
+                    return
+            elif chat_provider == "claude":
+                result = await is_valid_claude_key(chat_key)
+                if result is not True:
+                    await interaction.followup.send(f"❌ Chat用のAPIキーは利用できません。\n{result}", ephemeral=True)
+                    return
+                result = await is_claude_chat_model_available(chat_key, chat_model)
+                if result is not True:
+                    await interaction.followup.send(f"❌ Chatモデル `{chat_model}` は利用できません。\n{result}", ephemeral=True)
+                    return
+            else:
+                raise ValueError(f"❌ provider(chat) unsupported: {chat_provider}")
 
             # Vision
-            if vision_provider != "openai":
-                raise ValueError("provider(vision) unsupported")
             vision_key   = auth_json["vision"]["api_key"].strip()
             vision_model = auth_json["vision"]["model"].strip()
-            if (await is_valid_openai_key(vision_key)) is not True:
-                await interaction.followup.send("❌ Vision 用の API キーは利用できません。", ephemeral=True)
-                return
-            if not await is_openai_vision_model_available(vision_key, vision_model):
-                await interaction.followup.send(f"❌ Vision モデル `{vision_model}` は利用できません。", ephemeral=True)
-                return
+            if vision_provider == "openai":
+                result = await is_valid_openai_key(vision_key)
+                if result is not True:
+                    await interaction.followup.send(f"❌ Vision用のAPIキーは利用できません。\n{result}", ephemeral=True)
+                    return
+                result = await is_openai_vision_model_available(vision_key, vision_model)
+                if result is not True:
+                    await interaction.followup.send(f"❌ Visionモデル `{vision_model}` は利用できません。\n{result}", ephemeral=True)
+                    return
+            elif vision_provider == "gemini":
+                result = await is_valid_gemini_key(vision_key)
+                if result is not True:
+                    await interaction.followup.send(f"❌ Vision用のAPIキーは利用できません。\n{result}", ephemeral=True)
+                    return
+                result = await is_gemini_vision_model_available(vision_key, vision_model)
+                if result is not True:
+                    await interaction.followup.send(f"❌ Visionモデル `{vision_model}` は利用できません。\n{result}", ephemeral=True)
+                    return
+            elif vision_provider == "claude":
+                result = await is_valid_claude_key(vision_key)
+                if result is not True:
+                    await interaction.followup.send(f"❌ Vision用のAPIキーは利用できません。\n{result}", ephemeral=True)
+                    return
+                result = await is_claude_vision_model_available(vision_key, vision_model)
+                if result is not True:
+                    await interaction.followup.send(f"❌ Visionモデル `{vision_model}` は利用できません。\n{result}", ephemeral=True)
+                    return
+            else:
+                raise ValueError(f"❌ provider(vision) unsupported: {vision_provider}")
 
             # ImageGen
-            if image_provider != "openai":
-                raise ValueError("provider(imagegen) unsupported")
-            image_key    = auth_json["imagegen"]["api_key"].strip()
-            image_model  = auth_json["imagegen"]["model"].strip()
-            image_size   = str(auth_json["imagegen"].get("size", "")).strip() or "1024x1024"
-            image_quality= str(auth_json["imagegen"].get("quality", "")).strip() or "standard"
-            if (await is_valid_openai_key(image_key)) is not True:
-                await interaction.followup.send("❌ ImageGen 用の API キーは利用できません。", ephemeral=True)
-                return
-            if not await is_openai_imagegen_model_available(image_key, image_model, image_size, image_quality):
-                await interaction.followup.send(f"❌ ImageGen モデル `{image_model}` は利用できません。", ephemeral=True)
-                return
+            image_key     = auth_json["imagegen"]["api_key"].strip()
+            image_model   = auth_json["imagegen"]["model"].strip()
+            image_size    = str(auth_json["imagegen"].get("size", "")).strip() or "1024x1024"
+            image_quality = str(auth_json["imagegen"].get("quality", "")).strip() or "standard"
+            if image_provider == "openai":
+                result = await is_valid_openai_key(image_key)
+                if result is not True:
+                    await interaction.followup.send(f"❌ ImageGen用のAPIキーは利用できません。\n{result}", ephemeral=True)
+                    return
+                result = await is_openai_imagegen_model_available(image_key, image_model, image_size, image_quality)
+                if result is not True:
+                    await interaction.followup.send(f"❌ ImageGenモデル `{image_model}` は利用できません。\n{result}", ephemeral=True)
+                    return
+            elif image_provider == "gemini":
+                result = await is_valid_gemini_key(image_key)
+                if result is not True:
+                    await interaction.followup.send(f"❌ ImageGen用のAPIキーは利用できません。\n{result}", ephemeral=True)
+                    return
+                result = await is_gemini_imagegen_model_available(image_key, image_model)
+                if result is not True:
+                    await interaction.followup.send(f"❌ ImageGenモデル `{image_model}` は利用できません。\n{result}", ephemeral=True)
+                    return
+            else:
+                raise ValueError(f"❌ provider(imagegen) unsupported: {image_provider}")
 
-        except ValueError:
-            await interaction.followup.send("❌ 現在は provider='OpenAI' のみ対応しています。", ephemeral=True)
+        except ValueError as e:
+            await interaction.followup.send(f"❌ 対応していないプロバイダが指定されました。\n{e}", ephemeral=True)
             return
 
         # ---------------- セッション保存（ユーザーごと） ----------------
@@ -145,14 +208,20 @@ async def ac_auth_command(interaction: Interaction, file: discord.Attachment):
         user_session_manager.set_session(interaction.user.id, auth_json)
 
         # ---------------- プロンプト読み込み（/ac_auth 成功時に実行） ----------------
+        auth = (
+            f"🗨️{auth_json['chat']['provider']}/{auth_json['chat']['model']}, "
+            f"👀{auth_json['vision']['provider']}/{auth_json['vision']['model']}, "
+            f"🖼️{auth_json['imagegen']['provider']}/{auth_json['imagegen']['model']}"
+        )
+        authinfo = f"🧑‍💻 現在の認証情報［ {auth} ］"
         try:
             guild_id = interaction.guild.id if interaction.guild else 0
             # 認証は今保存したので、ユーザー優先で load_for_ctx がプロバイダを解決します
             load_for_ctx(user_id=interaction.user.id, guild_id=guild_id, force=True)
-            await interaction.followup.send("✅ 認証情報を登録しました。プロンプトを読み込みました。", ephemeral=True)
+            await interaction.followup.send(f"✅ 認証情報を登録しました。プロンプトを読み込みました。\n{authinfo}", ephemeral=True)
         except AuthNotConfigured:
             # 通常ここには来ない（いま登録したため）
-            await interaction.followup.send("✅ 認証情報を登録しました。（プロンプト読み込みは次回リクエスト時に実施）", ephemeral=True)
+            await interaction.followup.send(f"✅ 認証情報を登録しました。（プロンプト読み込みは次回リクエスト時に実施）\n{authinfo}", ephemeral=True)
 
     except Exception as e:
         try:

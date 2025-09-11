@@ -1,9 +1,21 @@
 import aiohttp
+import json
 from ai.openai.openai_api import generate_image_from_prompt
 
 # 認証情報で指定されたAPIが利用可能かチェックする
 
-OPENAI_CHAT_ENDPOINT = "https://api.openai.com/v1/chat/completions"
+OPENAI_BASE = "https://api.openai.com/v1"
+OPENAI_MODELS_ENDPOINT = f"{OPENAI_BASE}/models"
+OPENAI_CHAT_ENDPOINT   = f"{OPENAI_BASE}/chat/completions"
+
+# 共通HTTPユーティリティ
+async def _get_json(session: aiohttp.ClientSession, url: str, headers: dict):
+    async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+        return resp.status, await resp.text(), resp.headers
+
+async def _post_json(session: aiohttp.ClientSession, url: str, headers: dict, payload: dict):
+    async with session.post(url, headers=headers, json=payload, timeout=aiohttp.ClientTimeout(total=12)) as resp:
+        return resp.status, await resp.text(), resp.headers
 
 # APIキーのチェック
 async def is_valid_openai_key(api_key: str):
@@ -11,30 +23,23 @@ async def is_valid_openai_key(api_key: str):
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-    test_payload = {
-        "model": "gpt-3.5-turbo",
-        "messages": [{"role": "user", "content": "ping"}],
-        "max_tokens": 1
-    }
-
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
-            async with session.post(OPENAI_CHAT_ENDPOINT, headers=headers, json=test_payload) as response:
-                if response.status == 200:
-                    return True
-                elif response.status == 429:
-                    if "insufficient_quota" in await response.text():
-                        return "❌ 利用上限を超過しています。OpenAIの請求情報を確認してください。"
-                    else:
-                        return "❌ リクエストが多すぎます（429）。しばらく待って再試行してください。"
-                elif response.status == 401:
-                    return "❌ APIキーが無効です。"
-                else:
-                    return f"❌ 不明なエラー: {response.status} / {await response.text()}"
-
+            status, text, _ = await _get_json(session, OPENAI_MODELS_ENDPOINT, headers)
+            if status == 200:
+                return True
+            else:
+                err_type, err_msg = None, text
+                try:
+                    j = json.loads(text)
+                    err = j.get("error", {})
+                    err_type = err.get("type")
+                    err_msg  = err.get("message", text)
+                except Exception:
+                    pass
+                return f"❌ APIキー利用可否確認エラー: status={status}, type={err_type}, message={err_msg}"
     except Exception as e:
-        print(f"[validator] APIキー検証例外: {e}")
-        return f"❌ 通信エラー: {e}"
+        return f"❌ APIキー利用可否確認エラー: {e.__class__.__name__}: {e}"
 
 # チャットモデルのチェック
 async def is_openai_chat_model_available(api_key: str, model_name: str) -> bool:
@@ -43,19 +48,28 @@ async def is_openai_chat_model_available(api_key: str, model_name: str) -> bool:
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-    test_payload = {
+    payload = {
         "model": model_name,
         "messages": [{"role": "user", "content": "ping"}],
-        "max_tokens": 1
+        "max_tokens": 1,
     }
-
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
-            async with session.post(OPENAI_CHAT_ENDPOINT, headers=headers, json=test_payload) as response:
-                return response.status == 200
+            status, text, _ = await _post_json(session, OPENAI_CHAT_ENDPOINT, headers, payload)
+            if status == 200:
+                return True
+            else:
+                err_type, err_msg = None, text
+                try:
+                    j = json.loads(text)
+                    err = j.get("error", {})
+                    err_type = err.get("type")
+                    err_msg  = err.get("message", text)
+                except Exception:
+                    pass
+                return f"❌ Chatモデル利用可否確認エラー: status={status}, type={err_type}, message={err_msg}"
     except Exception as e:
-        print(f"[validator] Chatモデル利用可否確認エラー: {e}")
-        return False
+        return f"❌ Chatモデル利用可否確認エラー: {e.__class__.__name__}: {e}"
 
 # ビジョンモデルのチェック
 async def is_openai_vision_model_available(api_key: str, model_name: str) -> bool:
@@ -63,37 +77,47 @@ async def is_openai_vision_model_available(api_key: str, model_name: str) -> boo
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-    test_payload = {
+    payload = {
         "model": model_name,
         "messages": [
             {"role": "user", "content": [
                 {"type": "text", "text": "Describe this image."},
-                {"type": "image_url", "image_url": {"url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/640px-PNG_transparency_demonstration_1.png"}}
+                {"type": "image_url", "image_url": {
+                    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/640px-PNG_transparency_demonstration_1.png"
+                }}
             ]}
         ],
-        "max_tokens": 10
+        "max_tokens": 10,
     }
-
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
-            async with session.post(OPENAI_CHAT_ENDPOINT, headers=headers, json=test_payload) as response:
-                return response.status == 200
+            status, text, _ = await _post_json(session, OPENAI_CHAT_ENDPOINT, headers, payload)
+            if status == 200:
+                return True
+            else:
+                err_type, err_msg = None, text
+                try:
+                    j = json.loads(text)
+                    err = j.get("error", {})
+                    err_type = err.get("type")
+                    err_msg  = err.get("message", text)
+                except Exception:
+                    pass
+                return f"❌ Visionモデル利用可否確認エラー: status={status}, type={err_type}, message={err_msg}"
     except Exception as e:
-        print(f"[validator] Visionモデル利用可否確認エラー: {e}")
-        return False
+        return f"❌ Visionモデル利用可否確認エラー: {e.__class__.__name__}: {e}"
 
 # イメージ生成モデルのチェック
 async def is_openai_imagegen_model_available(api_key: str, model_name: str, image_size: str, image_quality: str) -> bool:
     try:
         await generate_image_from_prompt(
-            "A cute baby sea otter",
-            api_key,
-            model_name,
-            image_size,
-            image_quality,
-            90
+            prompt="A cute baby sea otter",
+            api_key=api_key,
+            model=model_name,
+            size=image_size,
+            quality=image_quality,
+            timeout_sec=90,
         )
         return True
     except Exception as e:
-        print(f"[validator] ImageGenモデル利用可否確認エラー: {e}")
-        return False
+        return f"❌ ImageGenモデル利用可否確認エラー: {e.__class__.__name__}: {e}"
