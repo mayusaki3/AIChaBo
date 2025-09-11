@@ -415,11 +415,22 @@ async def on_message(message: discord.Message):
             if action.tool == "web.read":
                 try:
                     async with message.channel.typing():
-                        # TODO: 実装ポイント
-                        # - action.urls を巡回して HTML テキスト抽出（タイトル/本文/発行日など）
-                        # - 必要なら本文を要約して citations を付与
-                        # - 結果文字列を result に格納
-                        result = f"\s読み取り対象: {len(action.urls)}件（ひな形）"
+                        items = await read_urls(
+                            action.urls,
+                            max_bytes = getattr(action, "max_bytes", 1_500_000) or 1_500_000,
+                            max_chars = getattr(action, "max_chars", 20_000) or 20_000,
+                            follow_pdfs = getattr(action, "follow_pdfs", True) if hasattr(action, "follow_pdfs") else True,
+                            extract_images = getattr(action, "extract_images", True) if hasattr(action, "extract_images") else True,
+                            analyze_images = getattr(action, "analyze_images", False) if hasattr(action, "analyze_images") else False,
+                            language_hint = getattr(action, "language_hint", None),
+                            require_citations = getattr(action, "require_citations", True) if hasattr(action, "require_citations") else True,
+                        )
+                        formatted = format_read_results_for_llm(
+                            items,
+                            require_citations = getattr(action, "require_citations", True) if hasattr(action, "require_citations") else True
+                        )
+                        # systemメッセージとして積む（\s プレフィックス）
+                        result = f"\sWEB読み取り結果:\n{formatted}"
                 except Exception as e:
                     result = f"web.read の実行中にエラーが発生しました: {e}"
                 context_list.append(result)
