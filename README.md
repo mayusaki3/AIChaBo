@@ -1,6 +1,6 @@
 # AIChaBo（AIChaBo/あいちゃぼ） 
 
-AIChaBo（あいちゃぼ）は、ユーザーの OpenAI API キーを使って Discord 上で ChatGPT / Gemini / Claude を利用できる Bot です。  
+AIChaBo（あいちゃぼ）は、ユーザーが発行した API キーを使って Discord 上で ChatGPT / Gemini / Claude を利用できる Bot です。  
 構成は「UI層」「AI層」「共通層」に分かれており、将来的な多プラットフォーム対応を想定しています。
 
 ## 環境変数の設定（Discord用）
@@ -153,7 +153,6 @@ AIChaBo は以下の /コマンドを提供しています：
 | `/ac_invite`                   | あいちゃぼを現在のスレッドに招待します。                               |
 | `/ac_leave`                    | あいちゃぼを現在のスレッドから退出させます。                           |
 | `/ac_newtopic`                 | 新しくトピックを始めます。以前の会話内容は忘れます。                   |
-| `/ac_loadtopic`                | トピックを読み直します。過去メッセージを編集/削除した場合に使用します。|
 | `/ac_summary`                  | 現在のトピックを要約し、要約前の会話内容は忘れます。                   |
 
 ## 環境変数の設定（あいちゃぼ用）

@@ -1,6 +1,7 @@
 from openai import AsyncOpenAI
-import aiohttp, base64, asyncio
+import aiohttp, base64, asyncio, json
 
+OPENAI_VISION_ENDPOINT = "https://api.openai.com/v1/chat/completions"
 OPENAI_IMAGEGEN_ENDPOINT = "https://api.openai.com/v1/images/generations"
 
 # 認証情報で指定されたAPIを呼び出す
@@ -27,6 +28,32 @@ async def call_chatgpt(context_list: list[dict], api_key: str, model: str = "gpt
         return response.choices[0].message.content
     except Exception as e:
         return f"❌ OpenAI 応答エラー: {e}"
+
+# 画像認識APIを呼び出す
+async def analyze_openai_vision(image_urls: list[str], prompt: str, api_key: str, model: str, max_tokens: int = 512) -> str:
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
+    content = [{"type": "text", "text": prompt or "What’s in these images?"}]
+    for u in (image_urls or [])[:8]:
+        content.append({"type": "image_url", "image_url": {"url": u}})
+
+    payload = {"model": model, "messages": [{"role": "user", "content": content}], "max_tokens": max_tokens}
+    try:
+        async with aiohttp.ClientSession() as sess:
+            async with sess.post(OPENAI_VISION_ENDPOINT, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=60)) as resp:
+                t = await resp.text()
+                if resp.status != 200:
+                    try:
+                        err = json.loads(t).get("error", {})
+                        return f"❌ OpenAI Vision エラー: status={resp.status}, type={err.get('type')}, message={err.get('message')}"
+                    except Exception:
+                        return f"❌ OpenAI Vision エラー: status={resp.status}, body={t}"
+                j = json.loads(t)
+                return (j["choices"][0]["message"]["content"] or "").strip()
+    except asyncio.TimeoutError:
+        return "❌ OpenAI Vision エラー: Timeout"
+    except Exception as e:
+        return f"❌ OpenAI Vision エラー: {e.__class__.__name__}: {str(e) or 'no message'}"
 
 # 画像生成APIを呼び出す
 async def generate_image_from_prompt(prompt: str, api_key: str, model: str, size: str, quality: str, timeout_sec: int = 60) -> bytes:

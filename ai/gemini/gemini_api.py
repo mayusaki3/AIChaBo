@@ -77,6 +77,7 @@ def _extract_b64_from_imagen_predict(resp_json: dict) -> str | None:
         pass
     return None
 
+# チャットAPIを呼び出す
 async def call_gemini_chat(context_list: List[str], api_key: str, model: str = "gemini-1.5-pro", max_tokens: int = 1024) -> str:
     contents, system_text = _build_contents_from_context(context_list)
     payload = {
@@ -104,6 +105,52 @@ async def call_gemini_chat(context_list: List[str], api_key: str, model: str = "
     except Exception as e:
         return f"❌ Gemini 応答エラー: {e.__class__.__name__}: {str(e) or 'no message'}"
 
+# 画像ダウンロード→Base64変換
+async def _download_image_to_b64(url: str, session, max_bytes: int = 4_000_000) -> tuple[str, str] | None:
+    # 戻り値: (mime_type, base64_data)
+    import base64, mimetypes
+    async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+        if resp.status != 200:
+            return None
+        ct = resp.headers.get("Content-Type", "")
+        raw = await resp.read()
+        if not raw or len(raw) > max_bytes:
+            return None
+        if not ct or not ct.startswith("image/"):
+            mt, _ = mimetypes.guess_type(url)
+            ct = mt or "image/png"
+        return ct, base64.b64encode(raw).decode("ascii")
+
+# 画像認識APIを呼び出す
+async def analyze_gemini_vision(image_urls: list[str], prompt: str, api_key: str, model: str, max_tokens: int = 512) -> str:
+    import json, asyncio
+    url = f"{_GEMINI_BASE}/models/{model}:generateContent?key={api_key}"
+    try:
+        async with aiohttp.ClientSession() as sess:
+            parts = [{"text": prompt or "Describe these images."}]
+            for u in (image_urls or [])[:8]:
+                got = await _download_image_to_b64(u, sess)
+                if not got:
+                    continue
+                mime, b64 = got
+                parts.append({"inline_data": {"mime_type": mime, "data": b64}})
+
+            payload = {"contents": [{"role": "user", "parts": parts}], "generationConfig": {"maxOutputTokens": max_tokens}}
+            status, text = await _post(sess, url, payload, timeout_total=60)
+            if status != 200:
+                try:
+                    j = json.loads(text); err = j.get("error", {})
+                    return f"❌ Gemini Vision エラー: status={status}, type={err.get('status')}, message={err.get('message')}"
+                except Exception:
+                    return f"❌ Gemini Vision エラー: status={status}, body={text}"
+            j = json.loads(text)
+            return _extract_text_from_generate_content(j) or "(no content)"
+    except asyncio.TimeoutError:
+        return "❌ Gemini Vision エラー: Timeout"
+    except Exception as e:
+        return f"❌ Gemini Vision エラー: {e.__class__.__name__}: {str(e) or 'no message'}"
+
+# 画像生成APIを呼び出す
 async def generate_gemini_image(prompt: str, api_key: str, model: str, size: str, quality: str, timeout_sec: int = 60) -> bytes:
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout_sec)) as session:

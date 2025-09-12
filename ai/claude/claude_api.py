@@ -25,6 +25,7 @@ async def _post(session: aiohttp.ClientSession, url: str, headers: dict, payload
         text = await resp.text()
         return resp.status, text, resp.headers
 
+# チャットを呼び出す
 async def call_claude_chat(context_list: List[str], api_key: str, model: str = "claude-3-5-sonnet-latest", max_tokens: int = 1024) -> str:
     messages, system_text = _build_messages_from_context(context_list)
     headers = {
@@ -64,3 +65,30 @@ async def call_claude_chat(context_list: List[str], api_key: str, model: str = "
 
 async def generate_claude_image(*args, **kwargs):
     raise RuntimeError("Claude image generation is not supported by Anthropic API (image understanding only).")
+
+# 画像認識APIを呼び出す
+async def analyze_claude_vision(image_urls: list[str], prompt: str, api_key: str, model: str, max_tokens: int = 512) -> str:
+    headers = {"x-api-key": api_key, "anthropic-version": _ANTHROPIC_VERSION, "content-type": "application/json"}
+    url = f"{_ANTHROPIC_BASE}/messages"
+    content = [{"type": "text", "text": prompt or "Describe these images."}]
+    for u in (image_urls or [])[:8]:
+        content.append({"type": "image", "source": {"type": "url", "url": u}})
+    payload = {"model": model, "max_tokens": max_tokens, "messages": [{"role": "user", "content": content}]}
+    try:
+        async with aiohttp.ClientSession() as sess:
+            async with sess.post(url, headers=headers, json=payload, timeout=aiohttp.ClientTimeout(total=60)) as resp:
+                t = await resp.text()
+                if resp.status != 200:
+                    try:
+                        err = json.loads(t).get("error", {})
+                        return f"❌ Claude Vision エラー: status={resp.status}, type={err.get('type')}, message={err.get('message')}"
+                    except Exception:
+                        return f"❌ Claude Vision エラー: status={resp.status}, body={t}"
+                j = json.loads(t)
+                blocks = j.get("content") or []
+                texts = [b.get("text") for b in blocks if b.get("type") == "text" and b.get("text")]
+                return "\n".join(texts).strip() if texts else "(no content)"
+    except asyncio.TimeoutError:
+        return "❌ Claude Vision エラー: Timeout"
+    except Exception as e:
+        return f"❌ Claude Vision エラー: {e.__class__.__name__}: {str(e) or 'no message'}"

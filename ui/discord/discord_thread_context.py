@@ -37,6 +37,23 @@ class DiscordThreadContextManager:
     def __init__(self) -> None:
         self.manager = ThreadContextManager()
         self.initialized_threads: set[str] = set()
+        self._thread_meta: dict[str, dict[str, Any]] = defaultdict(dict)
+
+    # --- メタ情報API ---
+    def get_meta(self, thread_id: str | int, key: str, default=None):
+        return self._thread_meta.get(str(thread_id), {}).get(key, default)
+
+    def set_meta(self, thread_id: str | int, key: str, value: Any) -> None:
+        tid = str(thread_id)
+        if tid not in self._thread_meta:
+            self._thread_meta[tid] = {}
+        self._thread_meta[tid][key] = value
+
+    def pop_meta(self, thread_id: str | int, key: str, default=None):
+        return self._thread_meta.get(str(thread_id), {}).pop(key, default)
+
+    def clear_meta(self, thread_id: str | int) -> None:
+        self._thread_meta.pop(str(thread_id), None)
 
     # スレッドIDごとに未初期化ならコンテキスト履歴を再構築
     async def ensure_initialized(self, thread: discord.Thread) -> None:
@@ -213,6 +230,7 @@ class DiscordThreadContextManager:
             self.initialized_threads.add(thread_id)
             # print(f"- [INIT ]: {thread_id}")
         self.manager.clear_context(thread_id)
+        self.clear_meta(thread_id)
 
     # スレッドIDごとにコンテキストをリセット
     def reset_context(self, thread_id: str) -> None:
@@ -221,6 +239,7 @@ class DiscordThreadContextManager:
             self.initialized_threads.remove(thread_id)
             print(f"- [RESET]: {thread_id}")
         self.manager.clear_context(thread_id)
+        self.clear_meta(thread_id)
 
     # スレッドIDが初期化されているか確認
     def is_initialized(self, thread_id: str) -> bool:

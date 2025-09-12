@@ -19,9 +19,10 @@ from ui.discord.commands.load_commands import load_commands
 from ui.discord.discord_thread_context import context_manager
 
 # AI/アクション
-from ai.openai.openai_api import call_chatgpt, generate_image_from_prompt
-from ai.gemini.gemini_api import call_gemini_chat, generate_gemini_image
-from ai.claude.claude_api import call_claude_chat
+from ai.openai.openai_api import call_chatgpt, analyze_openai_vision, generate_image_from_prompt
+from ai.gemini.gemini_api import call_gemini_chat, analyze_gemini_vision, generate_gemini_image
+from ai.claude.claude_api import call_claude_chat, analyze_claude_vision
+
 from common.actions.imagegen_action import ImageGenAction
 from common.actions.websearch_action import WebSearchAction
 from common.actions.webread_action import WebReadAction
@@ -366,9 +367,7 @@ async def on_message(message: discord.Message):
     pending_files: List[discord.File] = []
 
     max_tool_steps = server_session_manager.get_option(guild_id, "max_tool_steps", 10)
-    steps = 0
     while True:
-        steps += 1
 
         # オプション -printmsg:on, -expmsg:on 処理
         if printmsg or expmsg:
@@ -382,7 +381,8 @@ async def on_message(message: discord.Message):
 
         # ===== LLM 呼び出し → Action 実行ループ =====
         reply = ""
-        for _ in range(2):  # ツール1回まで再試行（必要なら増やす）
+        tool_runs = 0
+        while tool_runs < max_tool_steps:
             # チャット ==========
 
             # OpenAIの場合
@@ -464,7 +464,6 @@ async def on_message(message: discord.Message):
                 if trace_tool:
                     chain = " → ".join(tool_trace + ["response"])
                     print(f"[trace] {chain}")
-
                 break
 
             # WEB検索 ==========
@@ -496,10 +495,9 @@ async def on_message(message: discord.Message):
                 # オプション -printmsg:on, -expmsg:on 処理
                 if printmsg or expmsg:
                     _print(f"websearch result => \033[35m{result}\033[0m", printmsg, expmsg)
-
-                # ループ継続（次のプロンプトでアクションが返らなくなるまで）
-                if steps >= max_tool_steps:
-	                # オプション -tracetool:on 処理
+                # 続行
+                tool_runs += 1
+                if tool_runs >= max_tool_steps:
                     if trace_tool:
                         chain = " → ".join(tool_trace + ["response(max-step)"])
                         print(f"[trace] {chain}")
@@ -529,8 +527,9 @@ async def on_message(message: discord.Message):
                 except Exception as e:
                     result = f"web.read の実行中にエラーが発生しました: {e}"
                 context_list.append(result)
-                # 続行（スキーマが返らなくなるまで）
-                if steps >= max_tool_steps:
+                # 続行
+                tool_runs += 1
+                if tool_runs >= max_tool_steps:
                     if trace_tool:
                         chain = " → ".join(tool_trace + ["response(max-step)"])
                         print(f"[trace] {chain}")
@@ -541,16 +540,63 @@ async def on_message(message: discord.Message):
             if action.tool == "web.image":
                 try:
                     async with message.channel.typing():
-                        # TODO: 実装ポイント
-                        # - action.image_urls を Vision API に渡す
-                        # - action.questions/tasks をヒントに解析
-                        # - 結果文字列を result に格納
-                        result = f"\s画像解析対象: {len(action.image_urls)}件（ひな形）"
+                        provider = auth_data["chat"]["provider"]
+                        model    = auth_data["vision"]["model"] if "vision" in auth_data else auth_data["chat"]["model"]
+                        api_key  = auth_data["vision"]["api_key"] if "vision" in auth_data and auth_data["vision"].get("api_key") else auth_data["chat"]["api_key"]
+
+                        # --- 重複起動ガード ---
+                        user_last = (context_list[-1] if context_list else "") or ""
+                        if isinstance(user_last, str) and user_last.startswith("\\s"):
+                            user_last = ""
+                        base_q = (user_last.strip() or "画像の内容を要約し、重要なポイントを箇条書きで説明してください。")
+
+                        urls = list((action.image_urls or [])[:8])
+                        sig = (tuple(urls), base_q)
+
+                        # thread-scoped cache
+                        last_sig = context_manager.get_meta(thread.id, "last_webimage_sig")
+                        if last_sig == sig:
+                            # 直近と同一 → 新規実行せず、続行（通常応答に任せる）
+                            result = "\\s画像解析は直前の結果を再利用してください。"
+                            context_list.append(result)
+                            tool_runs += 1
+                            continue
+                        context_manager.set_meta(thread.id, "last_webimage_sig", sig)
+                        # --- /重複起動ガード ---
+
+                        # tasks に応じて軽く補足（describe/tags/ocr/nsfw_check）
+                        extra = []
+                        tset = set((getattr(action, "tasks", None) or []))
+                        if "ocr" in tset:
+                            extra.append("画像から読めるテキストを正確に抽出してください。")
+                        if "tags" in tset:
+                            extra.append("主要オブジェクトを3〜7語のタグで抽出してください。")
+                        if "nsfw_check" in tset:
+                            extra.append("成人向け/露出過多の可能性を簡潔に評価してください。")
+                        # 言語ヒント
+                        lang = getattr(action, "language_hint", None) or "ja"
+                        extra.append("出力は" + ("日本語" if lang.startswith("ja") else "英語") + "で。")
+                        question = base_q + ("\n" + "\n".join(extra) if extra else "")
+
+                        # 実行
+                        urls = list((action.image_urls or [])[:8])  # 上限8枚
+                        if provider == "OpenAI":
+                            vision_text = await analyze_openai_vision(urls, question, api_key, model)
+                        elif provider == "Gemini":
+                            vision_text = await analyze_gemini_vision(urls, question, api_key, model)
+                        elif provider == "Claude":
+                            vision_text = await analyze_claude_vision(urls, question, api_key, model)
+
+                        # 次ターンの指針を明記（下のパッチ2とセット）
+                        result = f"\\s画像解析の結果:\n{vision_text}\n\\s[web.image->chat] 次の1ターンはツールを起動せず、上の結果だけを根拠にユーザーの直近の問いに簡潔に答えてください。"
+                        if printmsg or expmsg:
+                            _print(f"webimage result => {vision_text[:2000]}", printmsg, expmsg)
                 except Exception as e:
                     result = f"web.image の実行中にエラーが発生しました: {e}"
                 context_list.append(result)
                 # 続行
-                if steps >= max_tool_steps:
+                tool_runs += 1
+                if tool_runs >= max_tool_steps:
                     if trace_tool:
                         chain = " → ".join(tool_trace + ["response(max-step)"])
                         print(f"[trace] {chain}")
@@ -568,7 +614,19 @@ async def on_message(message: discord.Message):
         # モデルの癖で先頭に「 あいちゃぼ: 」が入った場合を除去
         if reply:
             reply = reply.replace("あいちゃぼ: ", "", 1)
+        # 生のツールJSONを最終送信しない保険
+        def _looks_like_tool_json(s: str) -> bool:
+            try:
+                import json
+                obj = json.loads(s)
+                return isinstance(obj, dict) and "tool" in obj
+            except Exception:
+                return False
+
+        if (not pending_files) and reply and _looks_like_tool_json(reply):
+            reply = "（内部処理が完了しませんでした。もう一度お試しください。）"
         text_chunks = _split_for_discord(reply or "", limit=DISCORD_MSG_LIMIT)
+
         # 添付がある場合：1通目に本文(先頭チャンク)＋最初の添付群、以降は本文/添付を順次
         if pending_files:
             file_chunks = list(_chunks(pending_files, 10))
@@ -615,6 +673,12 @@ async def on_message(message: discord.Message):
 async def on_thread_delete(thread: discord.Thread):
     thread_id = str(thread.id)
     guild_id = str(thread.guild.id)
+
+    # メタ情報クリア
+    try:
+        context_manager.clear_meta(thread.id)
+    except Exception:
+        pass
 
     if is_thread_managed(SERVICE_NAME, guild_id, thread_id):
         try:
