@@ -196,40 +196,75 @@ AIChaBo は以下の /コマンドを提供しています：
 
     ```json
     {
+        // あいちゃぼ認証情報テンプレートの仕様バージョン
         "template_version": "1.0",
+        // === Chat（テキスト会話）用の設定 ===
         "chat": {
+            // 利用プロバイダ名（いずれかを選択: OpenAI / Gemini / Claude ）
             "provider": "OpenAI",
-            "api_key": "ここにあなたのOpenAI APIキーを入力",
+            // プロバイダのAPIキー
+            "api_key": "ここにあなたが利用するAPIキーを入力",
+            // 使用モデル（Chat用）
+            // 例: OpenAI: gpt-4o / o4-mini
+            //     Gemini: gemini-1.5-pro / gemini-1.5-flash
+            //     Claude: claude-sonnet-4-20250514 など
             "model": "gpt-4o",
-            "tone_prompt": "舌足らずな口調で、ユーザーの質問に対して答えること。",
-            "summary_prompt": "以下の会話ログを、内容がわかるよう簡潔に要約してください。返答には「了解しました」や「要約します」などの前置きは不要です。要約だけを返してください。",
-
-            (中略)
-
+            // 1レスポンスあたりの最大出力トークン
+            "max_tokens": 1500,
+            // プロンプトのカスタマイズ
+            "prompt_overrides": {
+                // あいちゃぼの、追加のふるまいを指示します。'#'で始まる行はコメントです。
+                "character_append": [
+                    "# あいちゃぼの、追加のふるまいを指示します。",
+                    "#【口調上書き】よりビジネス寄りで丁寧な敬体を心がけ、絵文字は原則使わない。"
+                ],
+                // '/ac_summary' コマンドで実行する要約方法を差し替えます。'#'で始まる行はコメントです。
+                "summary_replace": [
+                    "# 要約のやり方を指示します。'#'で始まる行はコメントです。",
+                    "#前置きなく、箇条書き 3〜6 点でまとめてください：",
+                    "#- 重要ポイントと事実",
+                    "#- 決定事項",
+                    "#- 未決・リスク",
+                    "#- 次アクション（担当・期日）",
+                    "#挨拶や長い引用は入れないでください。"
+                ]
+            }
         },
+        // === Vision（画像の説明/OCRなど）用の設定 ===
         "vision": {
+            // 利用プロバイダ名（いずれかを選択: OpenAI / Gemini / Claude ）
             "provider": "OpenAI",
-            "api_key": "ここにあなたのOpenAI APIキーを入力",
-            "model": "gpt-4o",
-
-            (中略)
-
+            // プロバイダのAPIキー
+            "api_key": "ここにあなたが利用するAPIキーを入力",
+            // 使用モデル（Vision用）
+            // 例: OpenAI: gpt-4o / gpt-4o-mini
+            //     Gemini: gemini-1.5-pro / 1.5-flash
+            //     Claude: claude-sonnet-4-20250514 など
+            "model": "gpt-4o"
         },
+        // === 画像生成（image.generate）用の設定 ===
         "imagegen": {
+            // 利用プロバイダ名（いずれかを選択: OpenAI / Gemini ）
             "provider": "OpenAI",
-            "api_key": "ここにあなたのOpenAI APIキーを入力",
+            // プロバイダのAPIキー
+            "api_key": "ここにあなたが利用するAPIキーを入力",
+            // 使用モデル（画像生成用）
+            // 例: OpenAI: dall-e-3 / gpt-image-1
+            //     Gemini: imagen-4.0-generate-001 / imagen-4.0-ultra-generate-001 / imagen-4.0-fast-generate-001 / imagen-3.0-generate-002 など
             "model": "dall-e-3",
+            // 既定の出力サイズ（モデルによって許容値が異なるため、あいちゃぼに情報があれば補正されます）
             "size": "1024x1024",
+            // 既定の品質（モデルによって "standard" / "hd" など異なるため、あいちゃぼに情報があれば補正されます）
             "quality": "standard"
         }
     }
     ```
     
     ### 🔸 各フィールドの説明
-   
-    - **chat**：テキスト会話に使用する設定です。`model` は GPT 系、`max_tokens` は最大応答トークン数、`tone_prompt` は口調用、`summary_prompt` は要約用プロンプトです。
-    - **vision**：画像付きメッセージを処理する際に使用されます。画像を含む質問がある場合、この設定があれば画像を処理できます。
-    - **imagegen**：画像生成（例：DALL·E）用の設定です。
+    以下の大項目に分かれています。詳細はテンプレート内のコメントを参照してください。
+    - **chat**：テキスト会話に使用する設定です。
+    - **vision**：画像を処理する際に使用されます。
+    - **imagegen**：画像生成用の設定です。
     
     > ⚠ 各セクションの `"provider"` は `"OpenAI"` `"Gemini"` `"Claude"` が指定可能です）。  
     > ⚠ Web検索機能は [DuckDuckGo](https://duckduckgo.com/) を使用しています。
