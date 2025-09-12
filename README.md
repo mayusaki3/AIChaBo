@@ -1,6 +1,6 @@
 # AIChaBo（AIChaBo/あいちゃぼ） 
 
-AIChaBo（あいちゃぼ）は、ユーザーの OpenAI API キーを使って Discord 上で ChatGPT を利用できる Bot です。  
+AIChaBo（あいちゃぼ）は、ユーザーの OpenAI API キーを使って Discord 上で ChatGPT / Gemini / Claude を利用できる Bot です。  
 構成は「UI層」「AI層」「共通層」に分かれており、将来的な多プラットフォーム対応を想定しています。
 
 ## 環境変数の設定（Discord用）
@@ -158,15 +158,16 @@ AIChaBo は以下の /コマンドを提供しています：
 
 ## 環境変数の設定（あいちゃぼ用）
 
-あいちゃぼのチャット機能を使用するには、認証情報（JSONファイル）のアップロードが必要です。  
+あいちゃぼのチャット機能を使用するには、認証情報（JSONCファイル）のアップロードが必要です。  
 1. `/ac_template` で認証情報設定用テンプレートをダウンロードします。
-2. 利用するAIチャット毎にリネームして、必要な情報を記入してください：
+2. 利用するAIチャット毎にリネームして、必要な情報を記入してください：  
+チャット用、画像認識用、画像生成用と、それぞれ別のLLMプロバイダ/モデルを指定できます。
 
     ### 🔹 OpenAI API Key の取得手順
     1. [OpenAI Platform](https://platform.openai.com/account/api-keys) にログイン
     2. 「+ Create new secret key」でAPIキーを生成
     3. 表示された `sk-xxxxx...` 形式のキーをコピー
-    4. /ac_template コマンドでダウンロードした JSONファイル の 各"api_key": に貼り付け
+    4. /ac_template コマンドでダウンロードした JSONCファイル の 各"api_key": に貼り付け
     🔒 注意：このAPIキーは絶対に外部に公開しないでください。
     5. 必要に応じて利用するチャットモデルをJSONファイル の 各"model": に貼り付け
     6. 必要に応じて以下のリンクよりログインしてBillingより支払方法や使用制限を設定
@@ -176,14 +177,14 @@ AIChaBo は以下の /コマンドを提供しています：
     1. Google AI Studio にログインし、API Keys ページを開きます。
     2. 「Create API key」をクリックして発行・コピー。
     3. 表示されたキーをコピー
-    4. /ac_template コマンドでダウンロードした JSONファイル の 各"api_key": に貼り付け
+    4. /ac_template コマンドでダウンロードした JSONCファイル の 各"api_key": に貼り付け
     🔒 注意：このAPIキーは絶対に外部に公開しないでください。
     5. 必要に応じて利用するチャットモデルをJSONファイル の 各"model": に貼り付け
 
     ### 🔹 Claude API Key の取得手順（Anthropic 直API）
     1. Anthropic Console にログインします。
     2. Console の Account / API Keys で Create Key を実行し、表示されたキーをコピーします。
-    3. /ac_template コマンドでダウンロードした JSONファイル の 各"api_key": に貼り付け
+    3. /ac_template コマンドでダウンロードした JSONCファイル の 各"api_key": に貼り付け
     🔒 注意：このAPIキーは絶対に外部に公開しないでください。
     4. 必要に応じて利用するチャットモデルをJSONファイル の 各"model": に貼り付け
 
@@ -230,7 +231,7 @@ AIChaBo は以下の /コマンドを提供しています：
     - **vision**：画像付きメッセージを処理する際に使用されます。画像を含む質問がある場合、この設定があれば画像を処理できます。
     - **imagegen**：画像生成（例：DALL·E）用の設定です。
     
-    > ⚠ 各セクションの `"provider"` は `"OpenAI"` 以外も指定可能です（将来対応予定）。  
+    > ⚠ 各セクションの `"provider"` は `"OpenAI"` `"Gemini"` `"Claude"` が指定可能です）。  
     > ⚠ Web検索機能は [DuckDuckGo](https://duckduckgo.com/) を使用しています。
 
 ## 招待リンクの設定
