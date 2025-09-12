@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "tool.web.read@1",
+  "title": "WebReadAction",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "tool": {
+      "const": "web.read"
+    },
+    "version": {
+      "type": "string",
+      "const": "1",
+      "default": "1"
+    },
+    "urls": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1,
+      "maxItems": 8
+    },
+    "max_bytes": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 1500000
+    },
+    "max_chars": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 20000
+    },
+    "follow_pdfs": {
+      "type": "boolean",
+      "default": true
+    },
+    "extract_images": {
+      "type": "boolean",
+      "default": true
+    },
+    "analyze_images": {
+      "type": "boolean",
+      "default": false
+    },
+    "language_hint": {
+      "type": "string"
+    },
+    "require_citations": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "tool",
+    "urls"
+  ],
+  "examples": [
+    {
+      "tool": "web.read",
+      "urls": [
+        "https://www.jma.go.jp/bosai/forecast/"
+      ],
+      "max_chars": 20000,
+      "max_bytes": 1500000,
+      "follow_pdfs": true,
+      "extract_images": true,
+      "analyze_images": false,
+      "require_citations": true
+    }
+  ]
+}

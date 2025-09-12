@@ -1,6 +1,5 @@
 import discord
 from discord import app_commands, Interaction, Thread
-from discord_handler import service_name
 from common.utils.thread_utils import is_thread_managed
 from ui.discord.discord_thread_context import context_manager
 
@@ -8,6 +7,8 @@ HELP_TEXT = {
     "usage": "/ac_loadtopic",
     "description": "現在のトピックを読み直します。過去メッセージを編集/削除した場合に使用します。"
 }
+
+SERVICE_NAME = "discord"
 
 @app_commands.command(name="ac_loadtopic", description=HELP_TEXT["description"])
 async def ac_loadtopiccommand(interaction: Interaction):
@@ -17,7 +18,7 @@ async def ac_loadtopiccommand(interaction: Interaction):
         return
 
     thread = interaction.channel
-    if not is_thread_managed(service_name, interaction.guild_id, thread.id):
+    if not is_thread_managed(SERVICE_NAME, interaction.guild_id, thread.id):
         await interaction.followup.send("⚠️ あいちゃぼはこのスレッドに参加していません。", ephemeral=True)
         return
 

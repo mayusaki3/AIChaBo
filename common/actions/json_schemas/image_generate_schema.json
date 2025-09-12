@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "tool.image.generate@1",
+  "title": "ImageGenAction",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "tool": { "const": "image.generate" },
+    "version": { "type": "string", "const": "1", "default": "1" },
+    "prompt": { "type": "string", "minLength": 1 },
+    "n": { "type": "integer", "default": 1 },
+    "size": { "type": "string", "description": "e.g., '1024x1024'" },
+    "transparent_background": { "type": "boolean", "default": false },
+    "success_message": { "type": "string" },
+    "failure_message": {"type": "string" }
+  },
+  "required": ["tool", "prompt"],
+  "examples": [
+    {
+      "tool": "image.generate",
+      "prompt": "A flat, pastel illustration of a sky-blue haired mascot waving hello, white hoodie, simple background.",
+      "n": 1,
+      "size": "1024x1024",
+      "transparent_background": false,
+      "success_message": "画像を{n}枚生成しました。",
+      "failure_message": "画像生成に失敗しました：{error}"
+    }
+  ]
+}
+

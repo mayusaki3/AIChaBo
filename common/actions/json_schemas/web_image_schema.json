@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "tool.web.image@1",
+  "title": "WebImageVisionAction",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "tool": { "const": "web.image" },
+    "version": { "type": "string", "const": "1", "default": "1" },
+    "images": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1,
+      "maxItems": 8,
+      "description": "HTTP(S) URLs of images to analyze."
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["describe", "ocr", "tags", "nsfw_check"]
+      },
+      "minItems": 1,
+      "maxItems": 4,
+      "uniqueItems": true,
+      "default": ["describe"],
+      "description": "Select one or more analysis tasks."
+    },
+    "language_hint": {
+      "type": "string",
+      "description": "Preferred output language code (e.g., 'ja', 'en')."
+    },
+    "max_tokens": {
+      "type": "integer",
+      "minimum": 64,
+      "maximum": 4096,
+      "default": 800,
+      "description": "Soft cap for output length."
+    }
+  },
+  "required": ["tool", "images"],
+  "examples": [
+    {
+      "tool": "web.image",
+      "images": [
+        "https://example.com/screenshot.png",
+        "https://example.com/receipt.jpg"
+      ],
+      "tasks": ["describe", "ocr"],
+      "language_hint": "ja",
+      "max_tokens": 800
+    }
+  ]
+}

@@ -1,6 +1,6 @@
-# AIChatBot（AIChaBo/あいちゃぼ） 
+# AIChaBo（AIChaBo/あいちゃぼ） 
 
-AIChatBot（AIChaBo/あいちゃぼ） は、ユーザーの OpenAI API キーを使って Discord 上で ChatGPT を利用できる Bot です。  
+AIChaBo（あいちゃぼ）は、ユーザーの OpenAI API キーを使って Discord 上で ChatGPT / Gemini / Claude を利用できる Bot です。  
 構成は「UI層」「AI層」「共通層」に分かれており、将来的な多プラットフォーム対応を想定しています。
 
 ## 環境変数の設定（Discord用）
@@ -31,16 +31,16 @@ sudo apt install -y git python3 python3-venv python3-pip unzip
 
 # 任意のディレクトリ作成
 cd /opt
-sudo mkdir AIChatBot
-sudo chown $USER AIChatBot
-cd AIChatBot
+sudo mkdir AIChaBo
+sudo chown $USER AIChaBo
+cd AIChaBo
 
 # 仮想環境の作成と有効化
 python3 -m venv venv
 source venv/bin/activate
 
-# AIChatBotをクローン
-git clone -b main https://github.com/mayusaki3/AIChatBot.git src
+# AIChaBoをクローン
+git clone -b main https://github.com/mayusaki3/AIChaBo.git src
 cd src
 
 # requirements.txt に応じて依存ライブラリをインストール
@@ -49,10 +49,13 @@ pip install -r requirements.txt
 requirements.txt に含まれる主なライブラリ:
 
 - python-dotenv
-- requests>=2.25.1
-- discord.py (>=2.3.2)
-- aiohttp (>=3.12,<4)
-- openai (>=1.0.0)
+- discord.py>=2.3.2
+- aiohttp>=3.12,<4
+- duckduckgo-search>=5.3.0
+- ddgs
+- openai>=1.0.0
+- google-generativeai
+- anthropic
 
 ```shell
 cp .env.example .env
@@ -62,17 +65,17 @@ nano .env
 
 ## 使用方法
 ### サービスの設定内容
-/etc/systemd/system/AIChatBot.service
+/etc/systemd/system/AIChaBo.service
 ```ini
 [Unit]
-Description=AIChatBot Service
+Description=AIChaBo Service
 After=network.target
 
 [Service]
 Type=simple
 User=ubuntu
-WorkingDirectory=/opt/AIChatBot/src
-ExecStart=/opt/AIChatBot/venv/bin/python ui/discord/Discord_AIChatBot.py
+WorkingDirectory=/opt/AIChaBo/src
+ExecStart=/opt/AIChaBo/venv/bin/python ui/discord/Discord_AIChaBo.py
 Restart=always
 
 [Install]
@@ -81,25 +84,25 @@ WantedBy=multi-user.target
 ### 起動方法
 ```shell
 # 上記設定を書き込み
-sudo nano /etc/systemd/system/AIChatBot.service
+sudo nano /etc/systemd/system/AIChaBo.service
 
 # 設定有効化と起動
 sudo systemctl daemon-reexec
 sudo systemctl daemon-reload
-sudo systemctl enable AIChatBot
-sudo systemctl start AIChatBot
+sudo systemctl enable AIChaBo
+sudo systemctl start AIChaBo
 
 # 動作確認
-sudo journalctl -u AIChatBot -f
+sudo journalctl -u AIChaBo -f
 ```
 
 ### 更新方法
 ```shell
-# AIChatBot サーバーを停止
-sudo systemctl stop AIChatBot.service
+# AIChaBo サーバーを停止
+sudo systemctl stop AIChaBo.service
 
 # 最新のコードを取得
-cd /opt/AIChatBot/src
+cd /opt/AIChaBo/src
 git pull origin main
 
 # 仮想環境をアクティベート
@@ -109,15 +112,15 @@ source ../venv/bin/activate
 pip install -r requirements.txt
 
 # サービス再起動
-sudo systemctl start AIChatBot.service
+sudo systemctl start AIChaBo.service
 
 # ステータス確認
-sudo systemctl status AIChatBot.service
+sudo systemctl status AIChaBo.service
 ```
 
 ## /コマンド一覧（Discord）
 
-AIChatBot は以下の /コマンドを提供しています：
+AIChaBo は以下の /コマンドを提供しています：
 
 | 基本コマンド                   | 説明                                                                   |
 |--------------------------------|------------------------------------------------------------------------|
@@ -134,12 +137,16 @@ AIChatBot は以下の /コマンドを提供しています：
 *1: 認証情報は「自分の認証情報」＞「共有された認証情報」の順に使用します。自分の認証情報のみ共有でき、誰の認証情報でも共有解除できます。
 
 *2: optionは、以下が指定できます。
->| option             | 説明                                                                |
->|--------------------|---------------------------------------------------------------------|
->| `-exp`             | 現スレッドのコンテキストリストを common/session/dump にエクスポート |
->| `-expall`          | 全スレッドのコンテキストリストを common/session/dump にエクスポート |
->| `-printmsg:on/off` | ONで、AIに投げるメッセージ内容をコンソールに出力                    |
->| `-showopt`         | 設定されているオプションを表示                                      |
+>| option              | 説明                                                                |
+>|---------------------|---------------------------------------------------------------------|
+>| `-exp`              | 現スレッドのコンテキストリストを common/session/dump にエクスポート |
+>| `-expall`           | 全スレッドのコンテキストリストを common/session/dump にエクスポート |
+>| `-expprompt`        | 現在使用中のプロンプトを common/session/dump にエクスポート         |
+>| `-loadprompt`       | プロンプトを再読み込み                                              |
+>| `-printmsg:on/off`  | ONで、AIに投げるメッセージ内容をコンソールに出力                    |
+>| `-expmsg:on/off`    | ONで、AIに投げるメッセージ内容を common/session/dump に出力         |
+>| `-showopt`          | 設定されているオプションを表示                                      |
+>| `-tracetool:on/off` | ONで、AIが起動するツール内容をコンソールに出力                      |
 
 | スレッド内コマンド             | 説明                                                                   |
 |--------------------------------|------------------------------------------------------------------------|
@@ -151,20 +158,36 @@ AIChatBot は以下の /コマンドを提供しています：
 
 ## 環境変数の設定（あいちゃぼ用）
 
-あいちゃぼのチャット機能を使用するには、認証情報（JSONファイル）のアップロードが必要です。  
+あいちゃぼのチャット機能を使用するには、認証情報（JSONCファイル）のアップロードが必要です。  
 1. `/ac_template` で認証情報設定用テンプレートをダウンロードします。
-2. 利用するAIチャット毎にリネームして、必要な情報を記入してください：
+2. 利用するAIチャット毎にリネームして、必要な情報を記入してください：  
+チャット用、画像認識用、画像生成用と、それぞれ別のLLMプロバイダ/モデルを指定できます。
 
     ### 🔹 OpenAI API Key の取得手順
     1. [OpenAI Platform](https://platform.openai.com/account/api-keys) にログイン
     2. 「+ Create new secret key」でAPIキーを生成
     3. 表示された `sk-xxxxx...` 形式のキーをコピー
-    4. /ac_template コマンドでダウンロードした JSONファイル の 各"api_key": に貼り付け
+    4. /ac_template コマンドでダウンロードした JSONCファイル の 各"api_key": に貼り付け
     🔒 注意：このAPIキーは絶対に外部に公開しないでください。
     5. 必要に応じて利用するチャットモデルをJSONファイル の 各"model": に貼り付け
     6. 必要に応じて以下のリンクよりログインしてBillingより支払方法や使用制限を設定
        https://platform.openai.com/account/billing
-    
+
+    ### 🔹 Gemini API Key の取得手順（Google AI Studio 直API）
+    1. Google AI Studio にログインし、API Keys ページを開きます。
+    2. 「Create API key」をクリックして発行・コピー。
+    3. 表示されたキーをコピー
+    4. /ac_template コマンドでダウンロードした JSONCファイル の 各"api_key": に貼り付け
+    🔒 注意：このAPIキーは絶対に外部に公開しないでください。
+    5. 必要に応じて利用するチャットモデルをJSONファイル の 各"model": に貼り付け
+
+    ### 🔹 Claude API Key の取得手順（Anthropic 直API）
+    1. Anthropic Console にログインします。
+    2. Console の Account / API Keys で Create Key を実行し、表示されたキーをコピーします。
+    3. /ac_template コマンドでダウンロードした JSONCファイル の 各"api_key": に貼り付け
+    🔒 注意：このAPIキーは絶対に外部に公開しないでください。
+    4. 必要に応じて利用するチャットモデルをJSONファイル の 各"model": に貼り付け
+
 3. 利用するAIチャットのファイルを `/ac_auth` コマンドでアップロードします。  
    AIチャットを切り替える場合は、別のファイルをアップロードします。
 
@@ -173,49 +196,84 @@ AIChatBot は以下の /コマンドを提供しています：
 
     ```json
     {
+        // あいちゃぼ認証情報テンプレートの仕様バージョン
         "template_version": "1.0",
+        // === Chat（テキスト会話）用の設定 ===
         "chat": {
+            // 利用プロバイダ名（いずれかを選択: OpenAI / Gemini / Claude ）
             "provider": "OpenAI",
-            "api_key": "ここにあなたのOpenAI APIキーを入力",
+            // プロバイダのAPIキー
+            "api_key": "ここにあなたが利用するAPIキーを入力",
+            // 使用モデル（Chat用）
+            // 例: OpenAI: gpt-4o / o4-mini
+            //     Gemini: gemini-1.5-pro / gemini-1.5-flash
+            //     Claude: claude-sonnet-4-20250514 など
             "model": "gpt-4o",
+            // 1レスポンスあたりの最大出力トークン
             "max_tokens": 1500,
-            "tone_prompt": "フレンドリーで親しみやすい口調で、ユーザーの質問に対して丁寧に答えること。",
-            "reply_prompt": "注: ひとつ前の発言は「{parent_message}」への返信です。",
-            "summary_prompt": "以下の会話ログを、内容がわかるよう簡潔に要約してください。返答には「了解しました」や「要約します」などの前置きは不要です。要約だけを返してください。",
-            "injection_prompt": "ひとつ前までの会話に対して返答すること。\n今は {now_jst} です。あなたの名前は「あいちゃぼ」です。空のメンションがあった場合は用事のみ聞くこと。",
-            "imagegen_prompt": "以下の会話ログから、画像生成用のプロンプトを作成してください。返答には「了解しました」などの前置きは不要です。プロンプトだけを返してください。",
-            "imagegen_keywords": [ "生成", "描", "イラスト", "画像", "イメージ", "ビジュアル" ]
+            // プロンプトのカスタマイズ
+            "prompt_overrides": {
+                // あいちゃぼの、追加のふるまいを指示します。'#'で始まる行はコメントです。
+                "character_append": [
+                    "# あいちゃぼの、追加のふるまいを指示します。",
+                    "#【口調上書き】よりビジネス寄りで丁寧な敬体を心がけ、絵文字は原則使わない。"
+                ],
+                // '/ac_summary' コマンドで実行する要約方法を差し替えます。'#'で始まる行はコメントです。
+                "summary_replace": [
+                    "# 要約のやり方を指示します。'#'で始まる行はコメントです。",
+                    "#前置きなく、箇条書き 3〜6 点でまとめてください：",
+                    "#- 重要ポイントと事実",
+                    "#- 決定事項",
+                    "#- 未決・リスク",
+                    "#- 次アクション（担当・期日）",
+                    "#挨拶や長い引用は入れないでください。"
+                ]
+            }
         },
+        // === Vision（画像の説明/OCRなど）用の設定 ===
         "vision": {
+            // 利用プロバイダ名（いずれかを選択: OpenAI / Gemini / Claude ）
             "provider": "OpenAI",
-            "api_key": "ここにあなたのOpenAI APIキーを入力",
-            "model": "gpt-4o",
-            "vision_prompt": "以下に挙げる画像を、画像毎に「画像１（連番）：内容」の形式で詳しく説明してください。返答には「了解しました」などの前置きは不要で、内容だけを返してください。"
+            // プロバイダのAPIキー
+            "api_key": "ここにあなたが利用するAPIキーを入力",
+            // 使用モデル（Vision用）
+            // 例: OpenAI: gpt-4o / gpt-4o-mini
+            //     Gemini: gemini-1.5-pro / 1.5-flash
+            //     Claude: claude-sonnet-4-20250514 など
+            "model": "gpt-4o"
         },
+        // === 画像生成（image.generate）用の設定 ===
         "imagegen": {
+            // 利用プロバイダ名（いずれかを選択: OpenAI / Gemini ）
             "provider": "OpenAI",
-            "api_key": "ここにあなたのOpenAI APIキーを入力",
+            // プロバイダのAPIキー
+            "api_key": "ここにあなたが利用するAPIキーを入力",
+            // 使用モデル（画像生成用）
+            // 例: OpenAI: dall-e-3 / gpt-image-1
+            //     Gemini: imagen-4.0-generate-001 / imagen-4.0-ultra-generate-001 / imagen-4.0-fast-generate-001 / imagen-3.0-generate-002 など
             "model": "dall-e-3",
+            // 既定の出力サイズ（モデルによって許容値が異なるため、あいちゃぼに情報があれば補正されます）
             "size": "1024x1024",
+            // 既定の品質（モデルによって "standard" / "hd" など異なるため、あいちゃぼに情報があれば補正されます）
             "quality": "standard"
         }
     }
     ```
     
     ### 🔸 各フィールドの説明
-   
-    - **chat**：テキスト会話に使用する設定です。`model` は GPT 系、`max_tokens` は最大応答トークン数、`summary_prompt` は要約用プロンプトです。
-    - **vision**：画像付きメッセージを処理する際に使用されます。画像を含む質問がある場合、この設定があれば画像を処理できます。
-    - **imagegen**：画像生成（例：DALL·E）用の設定です。
+    以下の大項目に分かれています。詳細はテンプレート内のコメントを参照してください。
+    - **chat**：テキスト会話に使用する設定です。
+    - **vision**：画像を処理する際に使用されます。
+    - **imagegen**：画像生成用の設定です。
     
-    > ⚠ 各セクションの `"provider"` は `"OpenAI"` 以外も指定可能です（将来対応予定）。  
-    > ⚠ `vision` や `imagegen` セクションが未指定の場合、該当機能は無効になります。
+    > ⚠ 各セクションの `"provider"` は `"OpenAI"` `"Gemini"` `"Claude"` が指定可能です）。  
+    > ⚠ Web検索機能は [DuckDuckGo](https://duckduckgo.com/) を使用しています。
 
 ## 招待リンクの設定
 
-AIChatBotの招待リンクの作成方法は以下の通りです。
+AIChaBoの招待リンクの作成方法は以下の通りです。
    1. [Discord Developer Portal](https://discord.com/developers/applications) にアクセス
-   2. My Applicationsで AIChatBot を選択
+   2. My Applicationsで AIChaBo を選択
    3. 左メニュー「OAuth2」→「OAuth2 URL Generator」を表示
    4. 「scopes」で以下のパーミッションをチェック  
      - bot  
@@ -231,8 +289,8 @@ AIChatBotの招待リンクの作成方法は以下の通りです。
      - Use Slash Commands  
    6. 「Generated URL」でコピーしてブラウザで開き、サーバーを選択して招待
 
-AIChatBot
+AIChaBo
 https://discord.com/oauth2/authorize?client_id=1392390825148944406&permissions=397284543488&integration_type=0&scope=bot+applications.commands
 
-AIChatBot Dev
+AIChaBo Dev
 https://discord.com/oauth2/authorize?client_id=1395576546747744357&permissions=397284543488&integration_type=0&scope=bot+applications.commands

@@ -1,6 +1,5 @@
 import discord
 from discord import app_commands, Interaction, Thread
-from discord_handler import service_name
 from common.utils.thread_utils import is_thread_managed
 from ui.discord.discord_thread_context import context_manager
 
@@ -8,6 +7,8 @@ HELP_TEXT = {
     "usage": "/ac_newtopic",
     "description": "新しくトピックを始めます。以前の会話内容は忘れます。"
 }
+
+SERVICE_NAME = "discord"
 
 @app_commands.command(name="ac_newtopic", description=HELP_TEXT["description"])
 async def ac_newtopiccommand(interaction: Interaction):
@@ -17,7 +18,7 @@ async def ac_newtopiccommand(interaction: Interaction):
         return
 
     thread = interaction.channel
-    if not is_thread_managed(service_name, interaction.guild_id, thread.id):
+    if not is_thread_managed(SERVICE_NAME, interaction.guild_id, thread.id):
         await interaction.followup.send("⚠️ あいちゃぼはこのスレッドに参加していません。", ephemeral=True)
         return
 
@@ -27,6 +28,8 @@ async def ac_newtopiccommand(interaction: Interaction):
         f"💬/ac_newtopic: 新しくトピックを始めます。以前の会話内容は忘れます。\n"
         f"・取り消す場合は、このメッセージを削除してから /ac_loadtopic を実行してください。"
     )
+
+    await interaction.followup.send("✅ 新しいトピックを始めました。", ephemeral=True)
 
 def register(tree: app_commands.CommandTree, client: discord.Client, guild: discord.Object = None):
     if guild:

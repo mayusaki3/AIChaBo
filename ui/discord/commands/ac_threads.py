@@ -1,6 +1,5 @@
 import discord
 from discord import app_commands, Interaction, Thread, ChannelType, Forbidden, HTTPException
-from discord_handler import service_name
 from common.utils.thread_utils import load_server_threads
 
 HELP_TEXT = {
@@ -8,10 +7,12 @@ HELP_TEXT = {
     "description": "あいちゃぼと会話中のスレッド一覧を表示します。"
 }
 
+SERVICE_NAME = "discord"
+
 @app_commands.command(name="ac_threads", description=HELP_TEXT["description"])
 async def ac_threads_command(interaction: Interaction):
     await interaction.response.defer(thinking=True, ephemeral=True)
-    thread_ids = load_server_threads(service_name, interaction.guild_id)
+    thread_ids = load_server_threads(SERVICE_NAME, interaction.guild_id)
     if not thread_ids:
         await interaction.followup.send("📭 会話中のスレッドはありません。", ephemeral=True)
         return

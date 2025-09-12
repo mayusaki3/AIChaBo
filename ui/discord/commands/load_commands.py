@@ -1,3 +1,4 @@
+# ui/discord/commands/load_commands.py
 import importlib
 import pkgutil
 from pathlib import Path

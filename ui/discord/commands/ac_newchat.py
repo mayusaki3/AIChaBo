@@ -1,7 +1,6 @@
 import datetime
 import discord
 from discord import app_commands, Interaction, Thread, ChannelType
-from discord_handler import service_name
 from typing import Optional
 from common.utils.thread_utils import add_thread_to_server
 
@@ -10,13 +9,17 @@ HELP_TEXT = {
     "description": "🔒 スレッド内使用不可: あいちゃぼとのチャット用に新しいスレッドを作成します。"
 }
 
+SERVICE_NAME = "discord"
+
 @app_commands.command(name="ac_newchat", description=HELP_TEXT["description"])
 @app_commands.describe(title="スレッドのタイトルを指定できます")
 @app_commands.describe(private="プライベートスレッドに指定できます（規定値=False）")
 async def ac_newchat_command(interaction: Interaction, title: Optional[str] = None, private: Optional[bool] = False):
-    # 🔒 スレッド内では使用不可
+    await interaction.response.defer(ephemeral=True)
+
+    # 🔒 スレッド内では使用不可（defer 済みなので followup で返す）
     if isinstance(interaction.channel, Thread):
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "❌ このコマンドは **スレッド内では使用できません**。\n"
             "通常のテキストチャンネルで実行してください。",
             ephemeral=True
@@ -39,21 +42,24 @@ async def ac_newchat_command(interaction: Interaction, title: Optional[str] = No
             auto_archive_duration=1440,
             invitable=False
         )
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"✅ スレッド [`{thread_name}`] を作成しました。",
             ephemeral=True
         )
-        add_thread_to_server(service_name, interaction.guild_id, thread.id)
+        add_thread_to_server(SERVICE_NAME, str(interaction.guild_id), thread.id)
         await thread.send(
             f"💬/ac_newchat: このスレッドは {interaction.user.mention} によって作成されました。\n"
             f"・このスレッド内でのメッセージは、投稿者が登録した認証情報に基づいて外部の AI に送信・応答されます。"
         )
 
     except Exception as e:
-        await interaction.response.send_message(
-            f"❌ スレッド作成に失敗しました：{str(e)}",
-            ephemeral=True
-        )
+        try:
+            await interaction.followup.send(
+                f"❌ スレッド作成に失敗しました：{str(e)}",
+                ephemeral=True
+            )
+        except Exception:
+            pass
 
 def register(tree: app_commands.CommandTree, client: discord.Client, guild: discord.Object = None):
     if guild:

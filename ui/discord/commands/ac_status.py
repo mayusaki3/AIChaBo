@@ -1,9 +1,15 @@
 import inspect
 import discord
+from pathlib import Path
+from datetime import datetime
 from discord import app_commands, Interaction, Thread
-from discord_handler import service_name
 from common.session.user_session_manager import user_session_manager
 from common.session.server_session_manager import server_session_manager
+from common.session.prompt_loader import (
+    load_for_ctx,
+    export_for_ctx,
+    AuthNotConfigured,
+)
 from common.utils.thread_utils import is_thread_managed
 from ui.discord.discord_thread_context import context_manager
 
@@ -11,6 +17,8 @@ HELP_TEXT = {
     "usage": "/ac_status <option>",
     "description": "使用中のあいちゃぼの状態を表示します。"
 }
+
+SERVICE_NAME = "discord"
 
 # オプションの解析
 def _parse_option_tokens(option: str | None) -> list[tuple[str, str, bool | None]]:
@@ -40,10 +48,6 @@ def _parse_option_tokens(option: str | None) -> list[tuple[str, str, bool | None
             out.append(("get", body.strip().lower(), None))
     return out
 
-# フラグの解析
-async def _maybe_await(result):
-    return await result if inspect.isawaitable(result) else result
-
 # 非同期処理
 async def _maybe_await(result):
     return await result if inspect.isawaitable(result) else result
@@ -60,7 +64,7 @@ async def ac_status_command(interaction: Interaction, option: str = None):
     managed = False
     if isinstance(thread, Thread):
         # スレッドIDでスレッド情報取得（存在しない場合は None）
-        if not is_thread_managed(service_name, interaction.guild_id, thread.id):
+        if not is_thread_managed(SERVICE_NAME, str(interaction.guild_id), thread.id):
             msg_lines.append("ℹ️ このスレッドであいちゃぼと会話するには /ac_invite であいちゃぼを招待してください。")
         else:
             managed = True
@@ -158,6 +162,77 @@ async def ac_status_command(interaction: Interaction, option: str = None):
                 export_msgs.append(f"❌ このスレッドのエクスポートに失敗しました: {e}")
         else:
             export_msgs.append("⚠️ スレッド外では `-exp` は使用できません。")
+
+    # option処理: -loadprompt オプション, -expprompt オプション
+    if "-loadprompt" in flags:
+        try:
+            # ユーザー＞サーバー優先で認証を解決して、chat/vision/image を再構築＆キャッシュ
+            load_for_ctx(user_id=user_id, guild_id=guild_id, force=True)
+            export_msgs.append("🔄 プロンプト/スキーマを再読み込みしました。")
+        except AuthNotConfigured:
+            export_msgs.append("⚠️ 認証情報が未設定のためプロンプト/スキーマは無効です。")
+
+    if "-expprompt" in flags:
+        out_dir = Path("common/session/dump")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+        fname = f"system_prompts_all_{guild_id or 'dm'}_{user_id}_{ts}.txt"
+        out_path = out_dir / fname
+
+        blocks: list[str] = []
+
+        # チャット用プロンプト
+        roles = [("chat","CHAT_PROMPT")]
+        for role, label in roles:
+            extra = None
+            # スレッド内で実行された場合のみ、thread_name を注入
+            if isinstance(thread, Thread):
+                def _nsfw_flag(obj) -> bool:
+                    try:
+                        if obj is None:
+                            return False
+                        if hasattr(obj, "nsfw"):  # TextChannel など
+                            return bool(getattr(obj, "nsfw"))
+                        if hasattr(obj, "is_nsfw"):  # メソッドの場合
+                            f = getattr(obj, "is_nsfw")
+                            return bool(f() if callable(f) else f)
+                    except Exception:
+                        pass
+                    return False
+
+                parent = getattr(thread, "parent", None)
+                parent_nsfw = _nsfw_flag(parent)
+                thread_nsfw = _nsfw_flag(thread)
+                extra = {
+                    "thread_name": thread.name,
+                    "channel_name": getattr(parent, "name", "") if parent else "",
+                    "channel_is_nsfw": "true" if (parent_nsfw or thread_nsfw) else "false",
+                }
+            data = export_for_ctx(role=role, user_id=user_id, guild_id=guild_id, extra_vars=extra)
+            text = data.decode("utf-8", errors="ignore") if data else ""
+            blocks.append(f"==== [{label}] ====\n{text}")
+
+        # 返信用（reply_to.txt）
+        try:
+            from common.session.prompt_loader import read_snippet_for_ctx
+            reply_to = read_snippet_for_ctx("reply_to", user_id, guild_id) or ""
+            blocks.append("==== [REPLY_TO_PROMPT] reply_to.txt ====\n" + reply_to)
+        except Exception:
+            pass
+
+        # 要約用（summary.txt）
+        try:
+            from common.session.prompt_loader import read_snippet_for_ctx
+            summary_snip = read_snippet_for_ctx("summary", user_id, guild_id) or ""
+            blocks.append("==== [SUMMARY_PROMPT] summary.txt ====\n" + summary_snip)
+        except Exception:
+            pass
+
+        merged = "\n\n".join(blocks)
+        out_path.write_text(merged, encoding="utf-8")
+
+        suffix = "（空ファイル）" if not merged.strip() else ""
+        export_msgs.append(f"📝 現在使用しているプロンプト/スキーマをエクスポートしました。")
 
     if export_msgs:
         msg_lines.append("")

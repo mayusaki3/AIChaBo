@@ -1,0 +1,68 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "tool.web.search@1",
+  "title": "WebSearchAction",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "tool": {
+      "const": "web.search",
+      "description": "Tool selector (must be 'web.search')."
+    },
+    "version": {
+      "type": "string",
+      "const": "1",
+      "description": "Schema version.",
+      "default": "1"
+    },
+    "queries": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1,
+      "maxItems": 3,
+      "description": "Up to 1–3 concise queries."
+    },
+    "top_result": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8,
+      "default": 5
+    },
+    "recency_days": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Set when freshness matters (e.g., 1–7)."
+    },
+    "require_citations": {
+      "type": "boolean",
+      "default": true
+    },
+    "lang": {
+      "type": "string",
+      "description": "Optional language hint (deprecated; prefer 'region')."
+    },
+    "region": {
+      "type": "string",
+      "description": "Region-language bias, e.g., 'jp-jp', 'us-en', 'uk-en'."
+    }
+  },
+  "required": [
+    "tool",
+    "queries"
+  ],
+  "examples": [
+    {
+      "tool": "web.search",
+      "queries": [
+        "Nagoya weather August 27, 2025"
+      ],
+      "top_result": 5,
+      "recency_days": 7,
+      "region": "us-en",
+      "require_citations": true
+    }
+  ]
+}
