@@ -255,11 +255,16 @@ async def on_message(message: discord.Message):
         hist = list(context_manager.get_context(thread.id))
         if not hist or hist[-1].get("msgid") != str(message.id):
             atts = context_manager.normalize_image_attachments(message.attachments)
+            docs = context_manager.normalize_doc_attachments(message.attachments)
             user_text = f"{author_name}: {message.content}"
             if atts:
                 urls = [a.get("url") for a in atts if a.get("url")]
                 if urls:
                     user_text += "\n\n[添付画像]\n" + "\n".join(f"- {u}" for u in urls)
+            if docs:
+                lines = [f"- {d.get('filename') or 'file'}: {d.get('url')}" for d in docs if d.get("url")]
+                if lines:
+                    user_text += "\n\n[添付ファイル]\n" + "\n".join(lines)
             context_manager.append_context(thread.id, user_text, str(message.id), "", atts)
     else:
         if message.reference and message.reference.message_id:
@@ -271,11 +276,16 @@ async def on_message(message: discord.Message):
             except Exception as e:
                 print(f"[reply-chain] backfill failed: {e}")
         atts = context_manager.normalize_image_attachments(message.attachments)
+        docs = context_manager.normalize_doc_attachments(message.attachments)
         user_text = f"{author_name}: {message.content}"
         if atts:
             urls = [a.get("url") for a in atts if a.get("url")]
             if urls:
                 user_text += "\n\n[添付画像]\n" + "\n".join(f"- {u}" for u in urls)
+        if docs:
+            lines = [f"- {d.get('filename') or 'file'}: {d.get('url')}" for d in docs if d.get("url")]
+            if lines:
+                user_text += "\n\n[添付ファイル]\n" + "\n".join(lines)
         context_manager.append_context(thread.id, user_text, str(message.id), refid, atts)
 
     # メッセージがボットからのものであれば終了
@@ -356,13 +366,48 @@ async def on_message(message: discord.Message):
         context_list.append(_format_reply_context(reply_src))
 
     # 最後に今回のユーザー発話（＝応答対象）
-    user_text = message.clean_content or message.content or ""
     atts = context_manager.normalize_image_attachments(message.attachments)
+    docs = context_manager.normalize_doc_attachments(message.attachments)
+    user_text = message.clean_content or message.content or ""
     if atts:
         urls = [a.get("url") for a in atts if a.get("url")]
         if urls:
             user_text += "\n\n[添付画像]\n" + "\n".join(f"- {u}" for u in urls)
+    if docs:
+        lines = [f"- {d.get('filename') or 'file'}: {d.get('url')}" for d in docs if d.get("url")]
+        if lines:
+            user_text += "\n\n[添付ファイル]\n" + "\n".join(lines)
     context_list.append(user_text)
+
+    # 非画像添付がある場合は、LLM を呼ぶ前に先に web.read 相当の読取りを実行し、
+    # 要約を \s（system）として文脈に積む。二重実行防止のため signature でガード。
+    if docs:
+        doc_urls = [d["url"] for d in docs if d.get("url")]
+        if doc_urls:
+            sig = tuple(doc_urls)[:8]
+            try:
+                last_sig = context_manager.get_meta(thread.id, "last_attached_doc_sig")
+                if last_sig != sig:
+                    # 実際の読取り
+                    async with message.channel.typing():
+                        items = await read_urls(
+                            doc_urls,
+                            max_bytes = 1_500_000,
+                            max_chars = 12_000,
+                            follow_pdfs = True,
+                            extract_images = False,
+                            analyze_images = False,
+                            language_hint = "ja",
+                            require_citations = False,
+                        )
+                        formatted = format_read_results_for_llm(items, require_citations=False)
+                        # system として積む（次の LLM ターンはこの結果を根拠に回答できる）
+                        context_list.append("\\s添付ファイルの内容プレビュー:\n" + formatted)
+                        context_manager.set_meta(thread.id, "last_attached_doc_sig", sig)
+            except Exception as e:
+                # 読取りエラーは致命ではない（LLM に通常どおり委ねる）
+                if printmsg or expmsg:
+                    _print(f"[pre web.read] failed: {e}", printmsg, expmsg)
 
     # オプション
     printmsg = server_session_manager.get_option(guild_id, "printmsg", False)

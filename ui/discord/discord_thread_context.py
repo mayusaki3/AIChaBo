@@ -89,11 +89,16 @@ class DiscordThreadContextManager:
             author_name = msg.author.name
             refid = str(msg.reference.message_id) if (msg.reference and msg.reference.message_id) else ""
             atts = self.normalize_image_attachments(msg.attachments)
+            docs = self.normalize_doc_attachments(msg.attachments)
             content = f"{author_name}: {msg.content}"
             if atts:
                 urls = [a.get("url") for a in atts if a.get("url")]
                 if urls:
                     content += "\n\n[添付画像]\n" + "\n".join(f"- {u}" for u in urls)
+            if docs:
+                lines = [f"- {d.get('filename') or 'file'}: {d.get('url')}" for d in docs if d.get("url")]
+                if lines:
+                    content += "\n\n[添付ファイル]\n" + "\n".join(lines)
             entry = self.append_context(
                 thread_id=str(thread.id),
                 message=content,
@@ -155,11 +160,16 @@ class DiscordThreadContextManager:
                 else ""
             )
             atts = self.normalize_image_attachments(m.attachments)
+            docs = self.normalize_doc_attachments(m.attachments)
             content = f"{author_name}: {m.content}"
             if atts:
                 urls = [a.get("url") for a in atts if a.get("url")]
                 if urls:
                     content += "\n\n[添付画像]\n" + "\n".join(f"- {u}" for u in urls)
+            if docs:
+                lines = [f"- {d.get('filename') or 'file'}: {d.get('url')}" for d in docs if d.get("url")]
+                if lines:
+                    content += "\n\n[添付ファイル]\n" + "\n".join(lines)
             entry = self.append_context(
                 thread_id=thread_id,
                 message=content,
@@ -257,6 +267,30 @@ class DiscordThreadContextManager:
     # 全スレッドをエクスポート
     def export_all_contexts(self) -> List[str]:
         return self.manager.export_all()
+
+    # Discordメッセージの添付（画像以外）を抽出し dict に格納
+    def normalize_doc_attachments(self, attachments):
+        """画像以外（テキスト/コード/PDF等）の添付を抽出"""
+        out = []
+        if not attachments:
+            return out
+        for att in attachments:
+            try:
+                url = getattr(att, "url", None)
+                fn  = getattr(att, "filename", "") or ""
+                ct  = getattr(att, "content_type", None) or mimetypes.guess_type(fn, strict=False)[0] or ""
+                if not url:
+                    continue
+                # 画像は除外
+                if ct.startswith("image/"):
+                    continue
+                # 代表的なテキスト/コード/ドキュメント拡張子
+                exts = (".py",".txt",".md",".pdf",".json",".csv",".yml",".yaml",".toml",".ipynb",".rst")
+                if any(fn.lower().endswith(e) for e in exts) or (ct and not ct.startswith("image/")):
+                    out.append({"url": url, "filename": fn, "content_type": ct})
+            except Exception:
+                continue
+        return out
 
     # Discordメッセージの添付画像を抽出し dict に格納
     def normalize_image_attachments(
