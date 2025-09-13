@@ -24,6 +24,9 @@ class ThreadContextManager:
         # スレッドIDごとに [コンテキスト要素(dict)] を保持
         self.contexts: dict[str, list[dict]] = {}
 
+        # スレッドIDごとに [メタ情報(dict)] を保持
+        self.meta: dict[str, dict[str, Any]] = {}
+
         # 初期化済みスレッドID
         self.initialized_threads: set[str] = set()
 
@@ -139,3 +142,31 @@ class ThreadContextManager:
                 # ここは必要に応じてログ出力に置き換え
                 print(f"[export_all] export failed for {thread_id}: {e}")
         return paths
+
+    # スレッドIDごとにメタ情報を取得
+    def get_meta(self, thread_id: str, key: str, default=None):
+        thread_id = str(thread_id)
+        return self.meta.get(thread_id, {}).get(key, default)
+
+    # スレッドIDごとにメタ情報を設定
+    def set_meta(self, thread_id: str, key: str, value):
+        thread_id = str(thread_id)
+        self.meta.setdefault(thread_id, {})[key] = value
+
+    # スレッドIDごとにメタ情報を1件取り出して削除
+    def pop_meta(self, thread_id: str, key: str, default=None):
+        thread_id = str(thread_id)
+        d = self.meta.get(thread_id, {})
+        return d.pop(key, default) if d else default
+
+    # スレッドIDごとにメタ情報をクリア
+    def clear_meta(self, thread_id: str, key: str | None = None):
+        thread_id = str(thread_id)
+        if key is None:
+            self.meta.pop(thread_id, None)
+        else:
+            d = self.meta.get(thread_id)
+            if d and key in d:
+                del d[key]
+                if not d:
+                    self.meta.pop(thread_id, None)

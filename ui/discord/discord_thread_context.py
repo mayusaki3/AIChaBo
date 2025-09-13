@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import mimetypes
-from collections import defaultdict
 from typing import Any, Dict, List, Optional
 
 import discord
@@ -37,23 +36,19 @@ class DiscordThreadContextManager:
     def __init__(self) -> None:
         self.manager = ThreadContextManager()
         self.initialized_threads: set[str] = set()
-        self._thread_meta: dict[str, dict[str, Any]] = defaultdict(dict)
 
     # --- メタ情報API ---
     def get_meta(self, thread_id: str | int, key: str, default=None):
-        return self._thread_meta.get(str(thread_id), {}).get(key, default)
+        return self.manager.get_meta(str(thread_id), key, default)
 
     def set_meta(self, thread_id: str | int, key: str, value: Any) -> None:
-        tid = str(thread_id)
-        if tid not in self._thread_meta:
-            self._thread_meta[tid] = {}
-        self._thread_meta[tid][key] = value
+        self.manager.set_meta(str(thread_id), key, value)
 
     def pop_meta(self, thread_id: str | int, key: str, default=None):
-        return self._thread_meta.get(str(thread_id), {}).pop(key, default)
+        return self.manager.pop_meta(str(thread_id), key, default)
 
     def clear_meta(self, thread_id: str | int) -> None:
-        self._thread_meta.pop(str(thread_id), None)
+        self.manager.clear_meta(str(thread_id))
 
     # スレッドIDごとに未初期化ならコンテキスト履歴を再構築
     async def ensure_initialized(self, thread: discord.Thread) -> None:
@@ -93,10 +88,15 @@ class DiscordThreadContextManager:
         for msg in reversed(messages):
             author_name = msg.author.name
             refid = str(msg.reference.message_id) if (msg.reference and msg.reference.message_id) else ""
-            atts = self._normalize_image_attachments(msg.attachments)
+            atts = self.normalize_image_attachments(msg.attachments)
+            content = f"{author_name}: {msg.content}"
+            if atts:
+                urls = [a.get("url") for a in atts if a.get("url")]
+                if urls:
+                    content += "\n\n[添付画像]\n" + "\n".join(f"- {u}" for u in urls)
             entry = self.append_context(
                 thread_id=str(thread.id),
-                message=f"{author_name}: {msg.content}",
+                message=content,
                 msgid=str(msg.id),
                 refid=refid,
                 attachments=atts if atts else None,
@@ -154,10 +154,15 @@ class DiscordThreadContextManager:
                 if (m.reference and m.reference.message_id)
                 else ""
             )
-            atts = self._normalize_image_attachments(m.attachments)
+            atts = self.normalize_image_attachments(m.attachments)
+            content = f"{author_name}: {m.content}"
+            if atts:
+                urls = [a.get("url") for a in atts if a.get("url")]
+                if urls:
+                    content += "\n\n[添付画像]\n" + "\n".join(f"- {u}" for u in urls)
             entry = self.append_context(
                 thread_id=thread_id,
-                message=f"{author_name}: {m.content}",
+                message=content,
                 msgid=str(m.id),
                 refid=refid,
                 attachments=atts if atts else None,
@@ -253,8 +258,8 @@ class DiscordThreadContextManager:
     def export_all_contexts(self) -> List[str]:
         return self.manager.export_all()
 
-    # Vision AI用に添付画像を抽出し dict に格納
-    def _normalize_image_attachments(
+    # Discordメッセージの添付画像を抽出し dict に格納
+    def normalize_image_attachments(
         self, attachments: List[discord.Attachment]
     ) -> List[Dict[str, Any]]:
         out: List[Dict[str, Any]] = []
@@ -286,7 +291,6 @@ class DiscordThreadContextManager:
                 "reply_message_ids": [],
             })
         return out
-
 
 # シングルトンとして使うインスタンス
 context_manager = DiscordThreadContextManager()

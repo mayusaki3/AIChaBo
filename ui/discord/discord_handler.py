@@ -15,6 +15,7 @@ from common.session.capabilities_loader import load_image_caps, normalize_image_
 from common.utils import thread_utils
 from common.utils.thread_utils import remove_thread_from_server, is_thread_managed
 from common.utils.websearch_utils import search_web, format_results_as_markdown
+from common.utils.webread_utils import read_urls, format_read_results_for_llm
 from ui.discord.commands.load_commands import load_commands
 from ui.discord.discord_thread_context import context_manager
 
@@ -252,14 +253,14 @@ async def on_message(message: discord.Message):
         await context_manager.ensure_initialized(thread)
         # 初回の取りこぼし対策：末尾が今回IDでなければ追加
         hist = list(context_manager.get_context(thread.id))
-        if not hist or hist[-1].get("id") != str(message.id):
-            context_manager.append_context(
-                thread.id,
-                f"{author_name}: {message.content}",
-                str(message.id),
-                "",
-                message.attachments
-            )
+        if not hist or hist[-1].get("msgid") != str(message.id):
+            atts = context_manager.normalize_image_attachments(message.attachments)
+            user_text = f"{author_name}: {message.content}"
+            if atts:
+                urls = [a.get("url") for a in atts if a.get("url")]
+                if urls:
+                    user_text += "\n\n[添付画像]\n" + "\n".join(f"- {u}" for u in urls)
+            context_manager.append_context(thread.id, user_text, str(message.id), "", atts)
     else:
         if message.reference and message.reference.message_id:
             refid = str(message.reference.message_id)
@@ -269,13 +270,13 @@ async def on_message(message: discord.Message):
                     await context_manager.backfill_reply_chain(thread, message, max_hops=10)
             except Exception as e:
                 print(f"[reply-chain] backfill failed: {e}")
-        context_manager.append_context(
-            thread.id,
-            f"{author_name}: {message.content}",
-            str(message.id),
-            refid,
-            message.attachments
-        )
+        atts = context_manager.normalize_image_attachments(message.attachments)
+        user_text = f"{author_name}: {message.content}"
+        if atts:
+            urls = [a.get("url") for a in atts if a.get("url")]
+            if urls:
+                user_text += "\n\n[添付画像]\n" + "\n".join(f"- {u}" for u in urls)
+        context_manager.append_context(thread.id, user_text, str(message.id), refid, atts)
 
     # メッセージがボットからのものであれば終了
     if message.author.bot:
@@ -356,6 +357,11 @@ async def on_message(message: discord.Message):
 
     # 最後に今回のユーザー発話（＝応答対象）
     user_text = message.clean_content or message.content or ""
+    atts = context_manager.normalize_image_attachments(message.attachments)
+    if atts:
+        urls = [a.get("url") for a in atts if a.get("url")]
+        if urls:
+            user_text += "\n\n[添付画像]\n" + "\n".join(f"- {u}" for u in urls)
     context_list.append(user_text)
 
     # オプション
@@ -396,7 +402,7 @@ async def on_message(message: discord.Message):
                     )
 
             # Geminiの場合
-            if auth_data["chat"]["provider"] == "Gemini":
+            elif auth_data["chat"]["provider"] == "Gemini":
                 async with message.channel.typing():
                     reply = await call_gemini_chat(
                         context_list,
@@ -406,7 +412,7 @@ async def on_message(message: discord.Message):
                     )
 
             # Claudeの場合
-            if auth_data["chat"]["provider"] == "Claude":
+            elif auth_data["chat"]["provider"] == "Claude":
                 async with message.channel.typing():
                     reply = await call_claude_chat(
                         context_list,
@@ -704,7 +710,7 @@ async def on_message_delete(message):
 # ====== 起動/同期 ======
 @client.event
 async def on_ready():
-    print(f"✅ {client.user} としてログインしました。(Ctrl-Cで終了します)")
+    print(f"✅ {client.user} としてログインしました。")
 
     try:
         load_commands(tree, client, GUILD_OBJ)
@@ -718,6 +724,7 @@ async def on_ready():
             print("🚀 本番モード（グローバル）でコマンドを同期しました")
 
         # 参加していないサーバーの検出とクリーニング（サーバーID単位）
+        print("🔎 サーバー/スレッドの確認中...")
         existing_server_ids = {str(guild.id) for guild in client.guilds}
         thread_utils.clean_deleted_servers(SERVICE_NAME, existing_server_ids)
 
@@ -726,15 +733,33 @@ async def on_ready():
             server_id = str(guild.id)
             thread_ids = set()
 
-            # チャンネルごとのアーカイブ済みスレッド
+            # チャンネルごとの全スレッド
             for channel in guild.text_channels:
-                for thread in channel.threads:
-                    thread_ids.add(str(thread.id))
+                # アクティブなスレッド
+                for t in channel.threads:
+                    thread_ids.add(str(t.id))
+
+                # 公開アーカイブ
+                try:
+                    async for t in channel.archived_threads(limit=None):
+                        thread_ids.add(str(t.id))
+                except (discord.Forbidden, discord.HTTPException):
+                    pass
+
+                # 非公開アーカイブ（joined=True は「Botがメンバーの非公開スレ」）
+                for joined in (True, False):
+                    try:
+                        async for t in channel.archived_threads(private=True, joined=joined, limit=None):
+                            thread_ids.add(str(t.id))
+                    except (discord.Forbidden, discord.HTTPException, AttributeError):
+                        # 権限不足 or ライブラリ差異（古い版等）は握りつぶす
+                        pass
 
             # スレッド存在チェック用に記憶されたスレッド一覧をクリーンアップ
             thread_utils.clean_deleted_threads(SERVICE_NAME, server_id, thread_ids)
 
         print("✅ 存在しないサーバー/スレッドのチェックおよびクリーンアップを完了しました")
+        print("✅ 起動完了 (Ctrl-Cで終了します)")
 
     except Exception as e:
         print(f"❌ コマンド同期に失敗しました: {e}")

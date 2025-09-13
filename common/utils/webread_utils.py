@@ -68,13 +68,13 @@ def _summarize(text: str, max_chars: int = 800) -> str:
         return text
     return text[: max_chars - 1] + "…"
 
-async def _fetch(session: aiohttp.ClientSession, url: str, max_bytes: int) -> Tuple[bytes, str]:
+async def _fetch(session: aiohttp.ClientSession, url: str, max_bytes: int) -> Tuple[bytes, str, int]:
     async with session.get(url, headers={"User-Agent": UA}, timeout=_DEFAULT_TIMEOUT, allow_redirects=True) as resp:
         ctype = resp.headers.get("Content-Type", "")
         raw = await resp.read()
         if max_bytes and len(raw) > max_bytes:
             raw = raw[:max_bytes]
-        return raw, ctype
+        return raw, ctype, resp.status
 
 def _parse_html(raw: bytes) -> Optional[lxml_html.HtmlElement]:
     try:
@@ -111,7 +111,7 @@ async def read_urls(
     max_chars: int = 20_000,
     follow_pdfs: bool = True,
     extract_images: bool = True,
-    analyze_images: bool = False,  # 解析自体は別ツールで
+    analyze_images: bool = False,  # TODO: 未実装、解析自体は別ツールで
     language_hint: Optional[str] = None,
     require_citations: bool = True,
 ) -> List[Dict[str, Any]]:
@@ -129,7 +129,10 @@ async def read_urls(
         if isinstance(item, Exception):
             results.append({"url": u, "error": str(item)})
             continue
-        raw, ctype = item
+        raw, ctype, status = item
+        if status >= 400:
+            results.append({"url": u, "error": f"HTTP {status}"})
+            continue
         is_pdf = ("application/pdf" in ctype.lower()) or u.lower().endswith(".pdf")
         if is_pdf:
             note = "PDF検出（本文抽出は未実装）"
