@@ -4,7 +4,7 @@ import re
 import discord
 from discord import app_commands, Thread
 from dotenv import load_dotenv
-from typing import List, Optional, Callable, Tuple
+from typing import List, Optional, Callable, Tuple, Awaitable
 from pathlib import Path
 from datetime import datetime
 
@@ -16,8 +16,17 @@ from common.utils import thread_utils
 from common.utils.thread_utils import remove_thread_from_server, is_thread_managed
 from common.utils.websearch_utils import search_web, format_results_as_markdown
 from common.utils.webread_utils import read_urls, format_read_results_for_llm
+from common.utils.attachments import split_attachments, render_append_block
+from common.utils.prefetch import prefetch_doc_summaries
+from common.utils.intent import (
+    build_tool_hint_auto,
+    detect_intent,
+    build_fallback_queries,
+    get_search_defaults,
+)
 from ui.discord.commands.load_commands import load_commands
 from ui.discord.discord_thread_context import context_manager
+from ui.discord.discord_attachments import from_discord_attachments
 
 # AI/アクション
 from ai.openai.openai_api import call_chatgpt, analyze_openai_vision, generate_image_from_prompt
@@ -54,7 +63,7 @@ DISCORD_MSG_LIMIT = 2000
 # ====== ユーティリティ ======
 
 # provider -> 画像生成関数マップ（bytes を返す関数）
-IMAGEGEN_GENERATORS: dict[str, Callable[..., "awaitable[bytes]"]] = {
+IMAGEGEN_GENERATORS: dict[str, Callable[..., Awaitable[bytes]]] = {
     "OpenAI": generate_image_from_prompt,   # 既存
     "Gemini": generate_gemini_image,        # 既存
     # "Claude": 画像生成は非対応（エラーを返す or マップしない）
@@ -248,24 +257,16 @@ async def on_message(message: discord.Message):
     # スレッドのコンテキスト初期化/追記
     author_name = message.author.display_name
     refid = ""
+    atts = from_discord_attachments(message.attachments)
+    imgs, docs = split_attachments(atts)
     if not context_manager.is_initialized(thread.id):
         # ensure_initialized 内で履歴ロード（discord_thread_context.py 側）
         await context_manager.ensure_initialized(thread)
         # 初回の取りこぼし対策：末尾が今回IDでなければ追加
         hist = list(context_manager.get_context(thread.id))
         if not hist or hist[-1].get("msgid") != str(message.id):
-            atts = context_manager.normalize_image_attachments(message.attachments)
-            docs = context_manager.normalize_doc_attachments(message.attachments)
-            user_text = f"{author_name}: {message.content}"
-            if atts:
-                urls = [a.get("url") for a in atts if a.get("url")]
-                if urls:
-                    user_text += "\n\n[添付画像]\n" + "\n".join(f"- {u}" for u in urls)
-            if docs:
-                lines = [f"- {d.get('filename') or 'file'}: {d.get('url')}" for d in docs if d.get("url")]
-                if lines:
-                    user_text += "\n\n[添付ファイル]\n" + "\n".join(lines)
-            context_manager.append_context(thread.id, user_text, str(message.id), "", atts)
+            user_text = f"{author_name}: {message.content}" + render_append_block(imgs, docs)
+            context_manager.append_context(thread.id, user_text, str(message.id), "", None)
     else:
         if message.reference and message.reference.message_id:
             refid = str(message.reference.message_id)
@@ -275,18 +276,8 @@ async def on_message(message: discord.Message):
                     await context_manager.backfill_reply_chain(thread, message, max_hops=10)
             except Exception as e:
                 print(f"[reply-chain] backfill failed: {e}")
-        atts = context_manager.normalize_image_attachments(message.attachments)
-        docs = context_manager.normalize_doc_attachments(message.attachments)
-        user_text = f"{author_name}: {message.content}"
-        if atts:
-            urls = [a.get("url") for a in atts if a.get("url")]
-            if urls:
-                user_text += "\n\n[添付画像]\n" + "\n".join(f"- {u}" for u in urls)
-        if docs:
-            lines = [f"- {d.get('filename') or 'file'}: {d.get('url')}" for d in docs if d.get("url")]
-            if lines:
-                user_text += "\n\n[添付ファイル]\n" + "\n".join(lines)
-        context_manager.append_context(thread.id, user_text, str(message.id), refid, atts)
+        user_text = f"{author_name}: {message.content}" + render_append_block(imgs, docs)
+        context_manager.append_context(thread.id, user_text, str(message.id), refid, None)
 
     # メッセージがボットからのものであれば終了
     if message.author.bot:
@@ -366,48 +357,26 @@ async def on_message(message: discord.Message):
         context_list.append(_format_reply_context(reply_src))
 
     # 最後に今回のユーザー発話（＝応答対象）
-    atts = context_manager.normalize_image_attachments(message.attachments)
-    docs = context_manager.normalize_doc_attachments(message.attachments)
     user_text = message.clean_content or message.content or ""
-    if atts:
-        urls = [a.get("url") for a in atts if a.get("url")]
-        if urls:
-            user_text += "\n\n[添付画像]\n" + "\n".join(f"- {u}" for u in urls)
-    if docs:
-        lines = [f"- {d.get('filename') or 'file'}: {d.get('url')}" for d in docs if d.get("url")]
-        if lines:
-            user_text += "\n\n[添付ファイル]\n" + "\n".join(lines)
+    user_text += render_append_block(imgs, docs)
     context_list.append(user_text)
 
     # 非画像添付がある場合は、LLM を呼ぶ前に先に web.read 相当の読取りを実行し、
     # 要約を \s（system）として文脈に積む。二重実行防止のため signature でガード。
     if docs:
-        doc_urls = [d["url"] for d in docs if d.get("url")]
+        doc_urls = [d.url for d in docs if d.url]
         if doc_urls:
-            sig = tuple(doc_urls)[:8]
-            try:
+            formatted, sig = await prefetch_doc_summaries(doc_urls)
+            if formatted and sig:
                 last_sig = context_manager.get_meta(thread.id, "last_attached_doc_sig")
                 if last_sig != sig:
-                    # 実際の読取り
-                    async with message.channel.typing():
-                        items = await read_urls(
-                            doc_urls,
-                            max_bytes = 1_500_000,
-                            max_chars = 12_000,
-                            follow_pdfs = True,
-                            extract_images = False,
-                            analyze_images = False,
-                            language_hint = "ja",
-                            require_citations = False,
-                        )
-                        formatted = format_read_results_for_llm(items, require_citations=False)
-                        # system として積む（次の LLM ターンはこの結果を根拠に回答できる）
-                        context_list.append("\\s添付ファイルの内容プレビュー:\n" + formatted)
-                        context_manager.set_meta(thread.id, "last_attached_doc_sig", sig)
-            except Exception as e:
-                # 読取りエラーは致命ではない（LLM に通常どおり委ねる）
-                if printmsg or expmsg:
-                    _print(f"[pre web.read] failed: {e}", printmsg, expmsg)
+                    context_list.append("\\s 添付ファイルの内容プレビュー:\n" + formatted)
+                    context_manager.set_meta(thread.id, "last_attached_doc_sig", sig)
+
+    # 検索ヒントを \s で注入（LLMに web.search を確実に思い出させる）
+    hint = build_tool_hint_auto(user_text, locale="ja")
+    if hint:
+        context_list.append("\\s " + hint)
 
     # オプション
     printmsg = server_session_manager.get_option(guild_id, "printmsg", False)
@@ -530,15 +499,41 @@ async def on_message(message: discord.Message):
                             timeout=15
                         )
                         if not search_results:
-                            result = f"{action.queries} に関する情報は見つかりませんでした。"
-                        else:
+                            # --- YAML定義による汎用フォールバック ---
+                            intent_name = detect_intent(user_text, locale="ja") or ""
+                            if intent_name:
+                                dedup, recency_override = build_fallback_queries(intent_name, action.queries, locale="ja")
+                                try:
+                                    search_results = await search_web(
+                                        queries=dedup,
+                                        top_result=action.top_result or 5,
+                                        recency_days=recency_override,  # YAMLが指定すれば上書き
+                                        region=action.region or "jp-jp",
+                                        require_citations=True,
+                                    )
+                                except Exception:
+                                    search_results = []
+                                if search_results:
+                                    formatted_results = format_results_as_markdown(search_results, require_citations=True)
+                                    q_preview = ", ".join(dedup[:2]) + (f" 他{len(dedup)-2}件" if len(dedup) > 2 else "")
+                                    result = f"\\s[{q_preview}] の検索結果→{formatted_results}"
+                                else:
+                                    q_preview = ", ".join(dedup[:2]) + (f" 他{len(dedup)-2}件" if len(dedup) > 2 else "")
+                                    result = f"[{q_preview}] に関する情報は見つかりませんでした。"
+                            else:
+                                q_preview = ", ".join(action.queries[:2]) + (f" 他{len(action.queries)-2}件" if len(action.queries) > 2 else "")
+                                result = f"[{q_preview}] に関する情報は見つかりませんでした。"
                             formatted_results = format_results_as_markdown(
                                 search_results,
                                 require_citations=action.require_citations
                             )
-                            result = f"\s{action.queries} の検索結果→{formatted_results}"
+                            q_preview = ", ".join(action.queries[:2])
+                            if len(action.queries) > 2:
+                                q_preview += f" 他{len(action.queries)-2}件"
+                            result = f"\s[{q_preview}] の検索結果→{formatted_results}"
                 except Exception as e:
-                    result = f"{action.queries} の検索中にエラーが発生しました: {e}"
+                    q_preview = ", ".join(action.queries[:2]) + (f" 他{len(action.queries)-2}件" if len(action.queries) > 2 else "")
+                    result = f"[{q_preview}] の検索中にエラーが発生しました: {e}"
 
                 # 検索結果を会話に追記して、必要ならもう一度 LLM へ
                 context_list.append(result)
@@ -596,9 +591,11 @@ async def on_message(message: discord.Message):
                         api_key  = auth_data["vision"]["api_key"] if "vision" in auth_data and auth_data["vision"].get("api_key") else auth_data["chat"]["api_key"]
 
                         # --- 重複起動ガード ---
-                        user_last = (context_list[-1] if context_list else "") or ""
-                        if isinstance(user_last, str) and user_last.startswith("\\s"):
-                            user_last = ""
+                        user_last = ""
+                        for m in reversed(context_list):
+                            if isinstance(m, str) and not m.startswith("\\s"):
+                                user_last = m
+                                break
                         base_q = (user_last.strip() or "画像の内容を要約し、重要なポイントを箇条書きで説明してください。")
 
                         urls = list((action.image_urls or [])[:8])

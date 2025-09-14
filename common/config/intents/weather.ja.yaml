@@ -1,0 +1,92 @@
+name: weather
+locale: ja
+
+# どの発話を天気インテントとみなすか
+triggers:
+  any_keywords:
+    - 天気
+    - 予報
+    - 最高気温
+    - 最低気温
+    - 降水確率
+    - 台風
+    - 雨
+    - 雷
+
+# テキスト前処理（順序通りに適用）
+text_normalizers:
+  - op: strip_tokens
+    tokens: ["今日", "明日", "明後日", "今週", "来週", "今週末", "来週末"]
+  - op: strip_particle
+    particle: "の"
+  - op: regex_replace
+    pattern: "\\s+"
+    replace: " "
+
+# エンティティ抽出（必要に応じて増やせる）
+extractors:
+  - name: city
+    type: regex
+    # 例: 「大阪の天気」「京都 天気」などから都市名を拾う
+    pattern: "([\\u4E00-\\u9FFF\\u3040-\\u30FF]{1,12})(?:の)?\\s*天気"
+    post:
+      - op: apply_alias
+        dict: "common/config/dictionaries/city_alias.ja.yaml"
+
+# 相対日付のルール（具体日付へ展開）
+date_rules:
+  - match: "今日"
+    op: offset_days
+    value: 0
+  - match: "明日"
+    op: offset_days
+    value: 1
+  - match: "明後日"
+    op: offset_days
+    value: 2
+  - match: "今週末"
+    op: weekend
+    week_offset: 0
+  - match: "来週末"
+    op: weekend
+    week_offset: 1
+
+# クエリ生成（条件に一致した最初のブロックが使われる）
+# {city}, {date_ja} は intent.py 側で埋め込み。複数日ある場合は先頭2日×テンプレを上限まで展開。
+max_queries: 3
+query_templates:
+  - when: { has_city: true, has_date: true }
+    queries:
+      - "{city} {date_ja} 天気 最高気温 最低気温 降水確率 site:tenki.jp"
+      - "{city} {date_ja} 天気 最高気温 最低気温 降水確率 site:weathernews.jp"
+      - "{city} 天気 週間 site:jma.go.jp/bosai/forecast"
+  - when: { has_city: true }
+    queries:
+      - "{city} の天気 site:tenki.jp"
+      - "{city} 天気 site:weathernews.jp"
+      - "{city} 天気 週間 site:jma.go.jp/bosai/forecast"
+
+# LLM への補足メモ（ヒント末尾にそのまま出す）
+hint_notes:
+  - "いずれかで結果が出たら直ちに web.read で本文から『対象日(JST)』の行を抜粋して要約して。"
+  - "推奨: recency_days は 7。"
+
+# 実行側（ゼロ件時）の再検索指示
+fallback:
+  recency_days: null           # 再検索では recency 指定を外す
+  limit: 3                     # 再検索クエリ上限
+  steps:
+    - name: relax_date
+      op: strip_date_string    # 「2025年9月20日」を除去
+    - name: weekly_wording
+      op: replace
+      pairs:
+        - [" 天気 週間", " 週間天気"]
+    - name: drop_site
+      op: strip_site_filter    # site: を除去
+
+# 既定の検索パラメータ（必要に応じて handler で参照可）
+search_defaults:
+  recency_days: 7
+  region: "jp-jp"
+  top_result: 5

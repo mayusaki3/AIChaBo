@@ -5,6 +5,8 @@ from typing import Any, Dict, List, Optional
 
 import discord
 from common.session.thread_context_manager import ThreadContextManager
+from common.utils.attachments import split_attachments, render_append_block
+from ui.discord.discord_attachments import from_discord_attachments
 
 # コンテキスト情報として、以下の内容を保持する。
 # - 収集範囲 : スレッド内の開始位置以降のすべてのメッセージ
@@ -88,23 +90,15 @@ class DiscordThreadContextManager:
         for msg in reversed(messages):
             author_name = msg.author.name
             refid = str(msg.reference.message_id) if (msg.reference and msg.reference.message_id) else ""
-            atts = self.normalize_image_attachments(msg.attachments)
-            docs = self.normalize_doc_attachments(msg.attachments)
-            content = f"{author_name}: {msg.content}"
-            if atts:
-                urls = [a.get("url") for a in atts if a.get("url")]
-                if urls:
-                    content += "\n\n[添付画像]\n" + "\n".join(f"- {u}" for u in urls)
-            if docs:
-                lines = [f"- {d.get('filename') or 'file'}: {d.get('url')}" for d in docs if d.get("url")]
-                if lines:
-                    content += "\n\n[添付ファイル]\n" + "\n".join(lines)
+            atts = from_discord_attachments(msg.attachments)
+            imgs, docs = split_attachments(atts)
+            content = f"{author_name}: {msg.content}" + render_append_block(imgs, docs)
             entry = self.append_context(
                 thread_id=str(thread.id),
                 message=content,
                 msgid=str(msg.id),
                 refid=refid,
-                attachments=atts if atts else None,
+                attachments=atts if atts else None
             )
             # if entry is not None:
             #     print(f"  [MSG++]: {entry['message']}")
@@ -150,36 +144,27 @@ class DiscordThreadContextManager:
             cur = parent
 
         # 親→子の順（古い→新しい）で追加
-        for m in reversed(chain):
-            if self._has_msg(thread_id, m.id):
+        for msg in reversed(chain):
+            if self._has_msg(thread_id, msg.id):
                 continue
-            author_name = m.author.display_name
+            author_name = msg.author.display_name
             refid = (
-                str(m.reference.message_id)
-                if (m.reference and m.reference.message_id)
+                str(msg.reference.message_id)
+                if (msg.reference and msg.reference.message_id)
                 else ""
             )
-            atts = self.normalize_image_attachments(m.attachments)
-            docs = self.normalize_doc_attachments(m.attachments)
-            content = f"{author_name}: {m.content}"
-            if atts:
-                urls = [a.get("url") for a in atts if a.get("url")]
-                if urls:
-                    content += "\n\n[添付画像]\n" + "\n".join(f"- {u}" for u in urls)
-            if docs:
-                lines = [f"- {d.get('filename') or 'file'}: {d.get('url')}" for d in docs if d.get("url")]
-                if lines:
-                    content += "\n\n[添付ファイル]\n" + "\n".join(lines)
+            atts = from_discord_attachments(msg.attachments)
+            imgs, docs = split_attachments(atts)
+            content = f"{author_name}: {msg.content}" + render_append_block(imgs, docs)
             entry = self.append_context(
                 thread_id=thread_id,
                 message=content,
-                msgid=str(m.id),
+                msgid=str(msg.id),
                 refid=refid,
-                attachments=atts if atts else None,
+                attachments=atts if atts else None
             )
             if entry is not None:
                 added += 1
-
         return added
 
     # message が返信であれば、返信元を最大 max_hops 回たどって返す

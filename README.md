@@ -143,6 +143,8 @@ AIChaBo は以下の /コマンドを提供しています：
 >| `-expall`           | 全スレッドのコンテキストリストを common/session/dump にエクスポート |
 >| `-expprompt`        | 現在使用中のプロンプトを common/session/dump にエクスポート         |
 >| `-loadprompt`       | プロンプトを再読み込み                                              |
+>| `-expintent`        | 現在使用中のインテント/辞書を common/session/dump にエクスポート    |
+>| `-loadintent`       | インテント/辞書を再読み込み                                         |
 >| `-printmsg:on/off`  | ONで、AIに投げるメッセージ内容をコンソールに出力                    |
 >| `-expmsg:on/off`    | ONで、AIに投げるメッセージ内容を common/session/dump に出力         |
 >| `-showopt`          | 設定されているオプションを表示                                      |
