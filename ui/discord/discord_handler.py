@@ -23,6 +23,7 @@ from common.utils.intent import (
     detect_intent,
     build_fallback_queries,
     get_search_defaults,
+    extract_from_read,  # 追加
 )
 from ui.discord.commands.load_commands import load_commands
 from ui.discord.discord_thread_context import context_manager
@@ -523,6 +524,7 @@ async def on_message(message: discord.Message):
                             else:
                                 q_preview = ", ".join(action.queries[:2]) + (f" 他{len(action.queries)-2}件" if len(action.queries) > 2 else "")
                                 result = f"[{q_preview}] に関する情報は見つかりませんでした。"
+                        else:
                             formatted_results = format_results_as_markdown(
                                 search_results,
                                 require_citations=action.require_citations
@@ -530,7 +532,7 @@ async def on_message(message: discord.Message):
                             q_preview = ", ".join(action.queries[:2])
                             if len(action.queries) > 2:
                                 q_preview += f" 他{len(action.queries)-2}件"
-                            result = f"\s[{q_preview}] の検索結果→{formatted_results}"
+                            result = f"\\s[{q_preview}] の検索結果→{formatted_results}"
                 except Exception as e:
                     q_preview = ", ".join(action.queries[:2]) + (f" 他{len(action.queries)-2}件" if len(action.queries) > 2 else "")
                     result = f"[{q_preview}] の検索中にエラーが発生しました: {e}"
@@ -568,8 +570,21 @@ async def on_message(message: discord.Message):
                             items,
                             require_citations = getattr(action, "require_citations", True) if hasattr(action, "require_citations") else True
                         )
+                        # --- YAML駆動の抽出（summary上で簡易抽出） ---
+                        extra_lines = []
+                        intent_name = detect_intent(user_text, locale="ja")
+                        if intent_name:
+                            for i, it in enumerate(items, 1):
+                                if "error" in it or it.get("is_pdf"):
+                                    continue
+                                text_for_extract = (it.get("summary") or "")
+                                extra = extract_from_read(intent_name, it.get("url",""), text_for_extract, locale="ja")
+                                if extra:
+                                    extra_lines.append(f"{i}. {extra}")
                         # systemメッセージとして積む（\s プレフィックス）
-                        result = f"\sWEB読み取り結果:\n{formatted}"
+                        result = f"\\sWEB読み取り結果:\n{formatted}"
+                        if extra_lines:
+                            result += "\n\n[抽出サマリ]\n" + "\n".join(extra_lines)
                 except Exception as e:
                     result = f"web.read の実行中にエラーが発生しました: {e}"
                 context_list.append(result)

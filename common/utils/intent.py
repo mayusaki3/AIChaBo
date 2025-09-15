@@ -283,7 +283,7 @@ def build_tool_hint_from_config(intent_name: str,
                              cfg.get("aliases", {}) or {})
 
     # 4) 相対日付 → 具体日付の配列
-    dates = _resolve_dates(norm_text, cfg.get("date_rules", []) or [])
+    dates = _resolve_dates(user_text or "", cfg.get("date_rules", []) or [])
     flags = {
         "has_city": bool(fields.get("city")),
         "has_date": bool(dates),
@@ -337,4 +337,51 @@ def build_tool_hint_auto(user_text: str,
         hint = build_tool_hint_from_config(name, user_text, locale)
         if hint:
             return hint
+    return None
+
+# ===== 読み取り抽出（web.readの本文からYAML駆動で抜粋） =====
+def get_read_extract_patterns(intent_name: str, locale: str = "ja") -> List[Dict[str, Any]]:
+    cfg = load_intent_config(intent_name, locale)
+    return cfg.get("read_extract_patterns", []) or []
+
+def extract_from_read(intent_name: str,
+                      url: str,
+                      text: str,
+                      locale: str = "ja") -> Optional[str]:
+    """YAML: read_extract_patterns を使い、本文 text から要点を抜粋して短いサマリを返す。"""
+    from urllib.parse import urlparse
+    host = urlparse(url).netloc
+    specs = get_read_extract_patterns(intent_name, locale)
+    if not specs:
+        return None
+    for spec in specs:
+        domain = spec.get("domain", "")
+        if domain and (domain not in host):
+            continue
+        fields = spec.get("fields", {}) or {}
+        out: Dict[str, str] = {}
+        # *_regex キーを総当たり
+        for k, pattern in fields.items():
+            if not isinstance(pattern, str):
+                continue
+            if not k.endswith("_regex"):
+                continue
+            try:
+                m = re.search(pattern, text, flags=re.S)
+                if m:
+                    # 1つ目のキャプチャを採用（なければ全体）
+                    out[k[:-6]] = (m.group(1) if m.groups() else m.group(0))
+            except re.error:
+                continue
+        # 体裁整形
+        parts: List[str] = []
+        if out.get("condition"):
+            parts.append(f"天気: {out['condition']}")
+        hi, lo = out.get("high_c"), out.get("low_c")
+        if hi or lo:
+            parts.append(f"気温: {hi or '?'}℃ / {lo or '?'}℃")
+        if out.get("precip"):
+            parts.append(f"降水: {out['precip']}")
+        if parts:
+            return " / ".join(parts)
     return None
