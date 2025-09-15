@@ -1,0 +1,120 @@
+name: weather
+locale: ja
+
+triggers:
+  any_keywords:
+    - 天気
+    - 予報
+    - 最高気温
+    - 最低気温
+    - 降水確率
+    - 台風
+    - 雨
+    - 雷
+
+# 文章の前処理（順に適用）
+text_normalizers:
+  # 日付語は抽出ロジックで使うので、検索語からは一旦除去
+  - op: strip_tokens
+    tokens: ["今日", "明日", "明後日", "今週", "来週", "今週末", "来週末"]
+  # 先頭に「の」が連続する場合を除去
+  - op: regex_replace
+    pattern: "^の+"
+    replace: ""
+  # 助詞「の」の連続・冗長化を抑制
+  - op: regex_replace
+    pattern: "の\\s+の"
+    replace: "の"
+  # 「天気」の直前の余計な「の」や空白を整形（例: "金沢の の天気"→"金沢の天気"）
+  - op: regex_replace
+    pattern: "\\s*の\\s*(?=天気)"
+    replace: "の"
+  # 全体の連続空白を1つに
+  - op: regex_replace
+    pattern: "\\s+"
+    replace: " "
+
+extractors:
+  - name: city
+    type: regex
+    # 「(都市)の天気」「(都市) 天気」などから都市名だけを第1キャプチャで取得
+    pattern: "(?:の)?([\\u4E00-\\u9FFF\\u3040-\\u30FF]{1,12})(?:の)?\\s*天気"
+    post:
+      - op: apply_alias
+        dict: "common/config/dictionaries/city_alias.ja.yaml"
+
+date_rules:
+  - match: "今日"
+    op: offset_days
+    value: 0
+  - match: "明日"
+    op: offset_days
+    value: 1
+  - match: "明後日"
+    op: offset_days
+    value: 2
+  - match: "今週末"
+    op: weekend
+    week_offset: 0
+  - match: "来週末"
+    op: weekend
+    week_offset: 1
+
+# 重要：日付は検索語に入れず、本文読取で対象日を抜粋する
+max_queries: 3
+query_templates:
+  # 都市・日付ともに抽出できたとき（検索語には日付を入れない）
+  - when: { has_city: true, has_date: true }
+    queries:
+      - "{city} の天気 site:tenki.jp"
+      - "{city} の天気 site:weathernews.jp"
+      - "{city} 天気 週間 site:jma.go.jp/bosai/forecast"
+  # 都市のみ抽出できたとき
+  - when: { has_city: true }
+    queries:
+      - "{city} の天気 site:tenki.jp"
+      - "{city} の天気 site:weathernews.jp"
+      - "{city} 天気 週間 site:jma.go.jp/bosai/forecast"
+
+# LLM への運用ヒント（強めの指示に変更）
+hint_notes:
+  - "厳守: 下の queries を**そのままの文字列で**順番に実行する（改変しない、日付を足さない）"
+  - "各 query の検索結果（top_result 件）を見て、ホストが tenki.jp / weathernews.jp / jma.go.jp の URL が見つかったら、それを web.read に渡す。見つからなければ**次の query**へ。"
+  - "対象日（JST）= {{target_date_jst}}。本文では『明日』または {{date_mmdd}}（例: 09月16日）を含むブロックから 天気/最高/最低/降水(%) を短く要約。"
+
+# 検索0件だった場合のみ適用するフォールバック（コードは既存のまま利用）
+fallback:
+  recency_days: null
+  limit: 3
+  steps:
+    - name: relax_date
+      op: strip_date_string
+    - name: weekly_wording
+      op: replace
+      pairs:
+        - [" 天気 週間", " 週間天気"]
+    - name: drop_site
+      op: strip_site_filter
+
+# web.read 用のドメイン別抽出ヒント（extract_from_read が利用）
+read_extract_patterns:
+  - domain: "tenki.jp"
+    focus_contains: ["明日", "{{date_mmdd}}", "{{weekday_jp}}"]
+    fields:
+      condition: "最高|最低|降水確率 の前後テキストから主要天気語（晴/曇/雨/雪 等）を拾う"
+      high_c_regex: "最高\\s*(\\d+)\\s*℃"
+      low_c_regex:  "最低\\s*(\\d+)\\s*℃"
+      precip_regex: "降水確率\\s*([0-9%\\s]+)"
+  - domain: "weathernews.jp"
+    focus_contains: ["今日明日", "週間", "{{weekday_jp}}", "{{date_mmdd}}"]
+    fields:
+      # 行構造が頻繁に変わるため、数値優先で抽出
+      high_c_regex: "(?:\\n|\\s)(\\d{1,2})℃"
+      low_c_regex:  "(\\d{1,2})℃"
+      precip_regex: "([0-9]{1,3})\\s*%|([0-9]{1,3})\\s*ミリ"
+
+# デフォルト検索パラメータ（discord_handler の get_search_defaults で参照）
+search_defaults:
+  recency_days: 7
+  region: "jp-jp"
+  top_result: 5

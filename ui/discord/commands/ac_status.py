@@ -10,6 +10,7 @@ from common.session.prompt_loader import (
     export_for_ctx,
     AuthNotConfigured,
 )
+from common.utils.intent import clear_intent_caches, build_tool_hint_from_config
 from common.utils.thread_utils import is_thread_managed
 from ui.discord.discord_thread_context import context_manager
 
@@ -163,7 +164,7 @@ async def ac_status_command(interaction: Interaction, option: str = None):
         else:
             export_msgs.append("⚠️ スレッド外では `-exp` は使用できません。")
 
-    # option処理: -loadprompt オプション, -expprompt オプション
+    # option処理: -loadprompt / -expprompt / -loadintent / -expintent オプション
     if "-loadprompt" in flags:
         try:
             # ユーザー＞サーバー優先で認証を解決して、chat/vision/image を再構築＆キャッシュ
@@ -233,6 +234,38 @@ async def ac_status_command(interaction: Interaction, option: str = None):
 
         suffix = "（空ファイル）" if not merged.strip() else ""
         export_msgs.append(f"📝 現在使用しているプロンプト/スキーマをエクスポートしました。")
+
+    if "-loadintent" in flags:
+        try:
+            clear_intent_caches()
+            export_msgs.append("🔄 インテントYAMLを再読み込みしました。")
+        except Exception as e:
+            export_msgs.append(f"❌ インテントYAMLの再読み込みに失敗しました: {e}")
+
+    if "-expintent" in flags:
+        try:
+            out_dir = Path("common/session/dump")
+            out_dir.mkdir(parents=True, exist_ok=True)
+            ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+            # intents/ と dictionaries/ をそのまま複製（読み取り→1ファイルに連結）
+            cfg_root = Path("common/config")
+            bundle_path = out_dir / f"intent_bundle_{ts}.txt"
+            parts: list[str] = []
+            for sub in ("intents", "dictionaries"):
+                p = cfg_root / sub
+                if not p.exists():
+                    continue
+                parts.append(f"==== [{sub}] ====")
+                for y in sorted(p.glob("**/*.yaml")):
+                    try:
+                        txt = y.read_text(encoding="utf-8", errors="ignore")
+                        parts.append(f"-- {y} --\n{txt}\n")
+                    except Exception as ee:
+                        parts.append(f"-- {y} --\n<read error: {ee}>\n")
+            bundle_path.write_text("\n".join(parts), encoding="utf-8")
+            export_msgs.append(f"🗂️ インテント定義を `{bundle_path}` にエクスポートしました。")
+        except Exception as e:
+            export_msgs.append(f"❌ インテント定義のエクスポートに失敗しました: {e}")
 
     if export_msgs:
         msg_lines.append("")

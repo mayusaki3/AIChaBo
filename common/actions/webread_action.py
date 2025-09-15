@@ -1,6 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, List, Dict, Any
+from urllib.parse import urlparse
 import json
 
 @dataclass
@@ -32,6 +33,20 @@ class WebReadAction:
                 urls = [str(u) for u in urls_field if u]
             else:
                 urls = []
+            # 正規化 + 検証 (http/https のみ) + 重複排除
+            clean: List[str] = []
+            for u in urls:
+                try:
+                    s = u.strip()
+                    p = urlparse(s)
+                    if p.scheme not in ("http", "https"):
+                        continue
+                    clean.append(s)
+                except Exception:
+                    continue
+            # preserve order dedupe
+            seen = set()
+            urls = [x for x in clean if not (x in seen or seen.add(x))]
             if not urls:
                 return None
 
@@ -50,6 +65,21 @@ class WebReadAction:
         except Exception:
             return None
 
+    def to_json(self) -> str:
+        """ロギング/エコー用の安全なJSON出力"""
+        return json.dumps({
+            "tool": self.tool,
+            "version": self.version,
+            "urls": self.urls,
+            "follow_links": self.follow_links,
+            "max_pages": self.max_pages,
+            "require_citations": self.require_citations,
+            "lang": self.lang,
+            "region": self.region,
+            "success_message": self.success_message,
+            "failure_message": self.failure_message,
+        }, ensure_ascii=False)
+
     @staticmethod
     def json_schema() -> Dict[str, Any]:
         return {
@@ -61,10 +91,12 @@ class WebReadAction:
             "properties": {
                 "tool": {"const": "web.read"},
                 "version": {"type": "string", "const": "1", "default": "1"},
+                "url": {"type": "string", "format": "uri", "pattern": "^(https?)://"},
                 "urls": {
                     "type": "array",
-                    "items": {"type": "string", "format": "uri"},
-                    "minItems": 1
+                    "items": {"type": "string", "format": "uri", "pattern": "^(https?)://"},
+                    "minItems": 1,
+                    "uniqueItems": True
                 },
                 "follow_links": {"type": "boolean", "default": False},
                 "max_pages": {"type": "integer", "minimum": 1, "maximum": 10, "default": 1},
@@ -74,7 +106,11 @@ class WebReadAction:
                 "success_message": {"type": "string"},
                 "failure_message": {"type": "string"}
             },
-            "required": ["tool", "urls"],
+            "required": ["tool"],
+            "oneOf": [
+                {"required": ["urls"]},
+                {"required": ["url"]}
+            ],
             "examples": [
                 {
                     "tool": "web.read",

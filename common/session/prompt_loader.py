@@ -95,6 +95,16 @@ def _now_jst_str() -> str:
     # フォールバック（UTC+9）
     return (datetime.now(timezone.utc) + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M")
 
+def _get_auth_data(user_id: int, guild_id: int) -> dict:
+    """ユーザー/サーバーの auth を取得（見つからなければNone）"""
+    auth_data = None
+    # user優先 → server
+    if user_session_manager.has_session(user_id):
+        auth_data = user_session_manager.get_session(user_id)
+    elif server_session_manager.has_session(guild_id):
+        auth_data = server_session_manager.get_session(guild_id)
+    return auth_data
+
 def _read_text(path: Path) -> str:
     try:
         return path.read_text(encoding="utf-8").strip()
@@ -205,7 +215,7 @@ def _resolve_auth_providers(user_id: int, guild_id: int) -> Dict[str, str]:
         "image": image_provider,
     }
 
-def _build_parts(role: str, provider: str) -> Tuple[dict, Dict[str, float]]:
+def _build_parts(role: str, provider: str, auth_data: dict) -> Tuple[dict, Dict[str, float]]:
     """
     置換前のパーツを返す:
       parts = {"head": str, "inj": str, "tail": str}
@@ -213,11 +223,23 @@ def _build_parts(role: str, provider: str) -> Tuple[dict, Dict[str, float]]:
     """
     paths = _collect_paths(provider)
 
+    character_append = None
+    if role == "chat" and auth_data:
+        po_chat = ((auth_data.get("chat") or {}).get("prompt_overrides") or {})
+        po_top  = (auth_data.get("prompt_overrides") or {})
+        character_append = po_chat.get("character_append", po_top.get("character_append"))
+        if isinstance(character_append, (list, tuple)):
+            character_append = "\n".join(str(x) for x in character_append if x is not None)
+        elif character_append is not None:
+            character_append = str(character_append)
+
     sections = []  # for head
     for key in ("general", "aichabo"):
         p = paths.get(key)
         if isinstance(p, Path):
             sections.append(_strip_comments_keep_code(_read_text(p)))
+            if key == "aichabo" and character_append:
+                sections.append(_strip_comments_keep_code(character_append))
     head = "\n\n".join([s for s in sections if s and s.strip()])
 
     inj_p = paths.get("injection")
@@ -241,6 +263,7 @@ def _build_parts(role: str, provider: str) -> Tuple[dict, Dict[str, float]]:
 def load_for_ctx(user_id: int, guild_id: int, *, force: bool = False) -> None:
     providers = _resolve_auth_providers(user_id, guild_id)
     now_iso = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    auth_data = _get_auth_data(user_id, guild_id)
 
     for role in ("chat", "vision", "image"):
         provider = providers[role]
@@ -248,7 +271,7 @@ def load_for_ctx(user_id: int, guild_id: int, *, force: bool = False) -> None:
         if not force and key in _CACHE:
             continue
 
-        parts = _build_parts(role, provider)
+        parts = _build_parts(role, provider, auth_data)
         _CACHE[key] = {"head": parts["head"], "inj": parts["inj"], "tail": parts["tail"]}
         # _LAST の length は get 時点の組み立て後の長さで更新します
         _LAST[role] = {"provider": provider, "loaded_at": now_iso, "length": len(parts["head"]) + len(parts["inj"]) + len(parts["tail"])}
@@ -303,6 +326,20 @@ def read_snippet_for_ctx(name: str, user_id: int, guild_id: int) -> str:
     認証未設定なら空文字を返す。
     - 取得時に # 行コメントは除去（コードフェンス内は温存）
     """
+    if name == "summary":
+        auth_data = _get_auth_data(user_id, guild_id)
+        if auth_data:
+            po_chat = ((auth_data.get("chat") or {}).get("prompt_overrides") or {})
+            po_top  = (auth_data.get("prompt_overrides") or {})
+            sr = po_chat.get("summary_replace", po_top.get("summary_replace"))
+            if isinstance(sr, (list, tuple)):
+                sr = "\n".join(str(x) for x in sr if x is not None)
+            elif sr is not None:
+                sr = str(sr)
+            if sr and sr.strip():
+                summary = _strip_comments_keep_code(sr.strip())
+                if summary:
+                    return summary
     try:
         providers = _resolve_auth_providers(user_id, guild_id)
         provider = providers.get("chat", "default")

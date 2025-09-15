@@ -4,7 +4,7 @@ import re
 import discord
 from discord import app_commands, Thread
 from dotenv import load_dotenv
-from typing import List, Optional, Callable, Tuple
+from typing import List, Optional, Callable, Tuple, Awaitable
 from pathlib import Path
 from datetime import datetime
 
@@ -15,13 +15,25 @@ from common.session.capabilities_loader import load_image_caps, normalize_image_
 from common.utils import thread_utils
 from common.utils.thread_utils import remove_thread_from_server, is_thread_managed
 from common.utils.websearch_utils import search_web, format_results_as_markdown
+from common.utils.webread_utils import read_urls, format_read_results_for_llm
+from common.utils.attachments import split_attachments, render_append_block
+from common.utils.prefetch import prefetch_doc_summaries
+from common.utils.intent import (
+    build_tool_hint_auto,
+    detect_intent,
+    build_fallback_queries,
+    get_search_defaults,
+    extract_from_read,  # 追加
+)
 from ui.discord.commands.load_commands import load_commands
 from ui.discord.discord_thread_context import context_manager
+from ui.discord.discord_attachments import from_discord_attachments
 
 # AI/アクション
-from ai.openai.openai_api import call_chatgpt, generate_image_from_prompt
-from ai.gemini.gemini_api import call_gemini_chat, generate_gemini_image
-from ai.claude.claude_api import call_claude_chat
+from ai.openai.openai_api import call_chatgpt, analyze_openai_vision, generate_image_from_prompt
+from ai.gemini.gemini_api import call_gemini_chat, analyze_gemini_vision, generate_gemini_image
+from ai.claude.claude_api import call_claude_chat, analyze_claude_vision
+
 from common.actions.imagegen_action import ImageGenAction
 from common.actions.websearch_action import WebSearchAction
 from common.actions.webread_action import WebReadAction
@@ -52,7 +64,7 @@ DISCORD_MSG_LIMIT = 2000
 # ====== ユーティリティ ======
 
 # provider -> 画像生成関数マップ（bytes を返す関数）
-IMAGEGEN_GENERATORS: dict[str, Callable[..., "awaitable[bytes]"]] = {
+IMAGEGEN_GENERATORS: dict[str, Callable[..., Awaitable[bytes]]] = {
     "OpenAI": generate_image_from_prompt,   # 既存
     "Gemini": generate_gemini_image,        # 既存
     # "Claude": 画像生成は非対応（エラーを返す or マップしない）
@@ -246,19 +258,16 @@ async def on_message(message: discord.Message):
     # スレッドのコンテキスト初期化/追記
     author_name = message.author.display_name
     refid = ""
+    atts = from_discord_attachments(message.attachments)
+    imgs, docs = split_attachments(atts)
     if not context_manager.is_initialized(thread.id):
         # ensure_initialized 内で履歴ロード（discord_thread_context.py 側）
         await context_manager.ensure_initialized(thread)
         # 初回の取りこぼし対策：末尾が今回IDでなければ追加
         hist = list(context_manager.get_context(thread.id))
-        if not hist or hist[-1].get("id") != str(message.id):
-            context_manager.append_context(
-                thread.id,
-                f"{author_name}: {message.content}",
-                str(message.id),
-                "",
-                message.attachments
-            )
+        if not hist or hist[-1].get("msgid") != str(message.id):
+            user_text = f"{author_name}: {message.content}" + render_append_block(imgs, docs)
+            context_manager.append_context(thread.id, user_text, str(message.id), "", None)
     else:
         if message.reference and message.reference.message_id:
             refid = str(message.reference.message_id)
@@ -268,13 +277,8 @@ async def on_message(message: discord.Message):
                     await context_manager.backfill_reply_chain(thread, message, max_hops=10)
             except Exception as e:
                 print(f"[reply-chain] backfill failed: {e}")
-        context_manager.append_context(
-            thread.id,
-            f"{author_name}: {message.content}",
-            str(message.id),
-            refid,
-            message.attachments
-        )
+        user_text = f"{author_name}: {message.content}" + render_append_block(imgs, docs)
+        context_manager.append_context(thread.id, user_text, str(message.id), refid, None)
 
     # メッセージがボットからのものであれば終了
     if message.author.bot:
@@ -355,7 +359,25 @@ async def on_message(message: discord.Message):
 
     # 最後に今回のユーザー発話（＝応答対象）
     user_text = message.clean_content or message.content or ""
+    user_text += render_append_block(imgs, docs)
     context_list.append(user_text)
+
+    # 非画像添付がある場合は、LLM を呼ぶ前に先に web.read 相当の読取りを実行し、
+    # 要約を \s（system）として文脈に積む。二重実行防止のため signature でガード。
+    if docs:
+        doc_urls = [d.url for d in docs if d.url]
+        if doc_urls:
+            formatted, sig = await prefetch_doc_summaries(doc_urls)
+            if formatted and sig:
+                last_sig = context_manager.get_meta(thread.id, "last_attached_doc_sig")
+                if last_sig != sig:
+                    context_list.append("\\s 添付ファイルの内容プレビュー:\n" + formatted)
+                    context_manager.set_meta(thread.id, "last_attached_doc_sig", sig)
+
+    # 検索ヒントを \s で注入（LLMに web.search を確実に思い出させる）
+    hint = build_tool_hint_auto(user_text, locale="ja")
+    if hint:
+        context_list.append("\\s " + hint)
 
     # オプション
     printmsg = server_session_manager.get_option(guild_id, "printmsg", False)
@@ -366,9 +388,7 @@ async def on_message(message: discord.Message):
     pending_files: List[discord.File] = []
 
     max_tool_steps = server_session_manager.get_option(guild_id, "max_tool_steps", 10)
-    steps = 0
     while True:
-        steps += 1
 
         # オプション -printmsg:on, -expmsg:on 処理
         if printmsg or expmsg:
@@ -382,7 +402,8 @@ async def on_message(message: discord.Message):
 
         # ===== LLM 呼び出し → Action 実行ループ =====
         reply = ""
-        for _ in range(2):  # ツール1回まで再試行（必要なら増やす）
+        tool_runs = 0
+        while tool_runs < max_tool_steps:
             # チャット ==========
 
             # OpenAIの場合
@@ -396,7 +417,7 @@ async def on_message(message: discord.Message):
                     )
 
             # Geminiの場合
-            if auth_data["chat"]["provider"] == "Gemini":
+            elif auth_data["chat"]["provider"] == "Gemini":
                 async with message.channel.typing():
                     reply = await call_gemini_chat(
                         context_list,
@@ -406,7 +427,7 @@ async def on_message(message: discord.Message):
                     )
 
             # Claudeの場合
-            if auth_data["chat"]["provider"] == "Claude":
+            elif auth_data["chat"]["provider"] == "Claude":
                 async with message.channel.typing():
                     reply = await call_claude_chat(
                         context_list,
@@ -464,7 +485,6 @@ async def on_message(message: discord.Message):
                 if trace_tool:
                     chain = " → ".join(tool_trace + ["response"])
                     print(f"[trace] {chain}")
-
                 break
 
             # WEB検索 ==========
@@ -480,15 +500,42 @@ async def on_message(message: discord.Message):
                             timeout=15
                         )
                         if not search_results:
-                            result = f"{action.queries} に関する情報は見つかりませんでした。"
+                            # --- YAML定義による汎用フォールバック ---
+                            intent_name = detect_intent(user_text, locale="ja") or ""
+                            if intent_name:
+                                dedup, recency_override = build_fallback_queries(intent_name, action.queries, locale="ja")
+                                try:
+                                    search_results = await search_web(
+                                        queries=dedup,
+                                        top_result=action.top_result or 5,
+                                        recency_days=recency_override,  # YAMLが指定すれば上書き
+                                        region=action.region or "jp-jp",
+                                        require_citations=True,
+                                    )
+                                except Exception:
+                                    search_results = []
+                                if search_results:
+                                    formatted_results = format_results_as_markdown(search_results, require_citations=True)
+                                    q_preview = ", ".join(dedup[:2]) + (f" 他{len(dedup)-2}件" if len(dedup) > 2 else "")
+                                    result = f"\\s[{q_preview}] の検索結果→{formatted_results}"
+                                else:
+                                    q_preview = ", ".join(dedup[:2]) + (f" 他{len(dedup)-2}件" if len(dedup) > 2 else "")
+                                    result = f"[{q_preview}] に関する情報は見つかりませんでした。"
+                            else:
+                                q_preview = ", ".join(action.queries[:2]) + (f" 他{len(action.queries)-2}件" if len(action.queries) > 2 else "")
+                                result = f"[{q_preview}] に関する情報は見つかりませんでした。"
                         else:
                             formatted_results = format_results_as_markdown(
                                 search_results,
                                 require_citations=action.require_citations
                             )
-                            result = f"\s{action.queries} の検索結果→{formatted_results}"
+                            q_preview = ", ".join(action.queries[:2])
+                            if len(action.queries) > 2:
+                                q_preview += f" 他{len(action.queries)-2}件"
+                            result = f"\\s[{q_preview}] の検索結果→{formatted_results}"
                 except Exception as e:
-                    result = f"{action.queries} の検索中にエラーが発生しました: {e}"
+                    q_preview = ", ".join(action.queries[:2]) + (f" 他{len(action.queries)-2}件" if len(action.queries) > 2 else "")
+                    result = f"[{q_preview}] の検索中にエラーが発生しました: {e}"
 
                 # 検索結果を会話に追記して、必要ならもう一度 LLM へ
                 context_list.append(result)
@@ -496,10 +543,9 @@ async def on_message(message: discord.Message):
                 # オプション -printmsg:on, -expmsg:on 処理
                 if printmsg or expmsg:
                     _print(f"websearch result => \033[35m{result}\033[0m", printmsg, expmsg)
-
-                # ループ継続（次のプロンプトでアクションが返らなくなるまで）
-                if steps >= max_tool_steps:
-	                # オプション -tracetool:on 処理
+                # 続行
+                tool_runs += 1
+                if tool_runs >= max_tool_steps:
                     if trace_tool:
                         chain = " → ".join(tool_trace + ["response(max-step)"])
                         print(f"[trace] {chain}")
@@ -524,13 +570,27 @@ async def on_message(message: discord.Message):
                             items,
                             require_citations = getattr(action, "require_citations", True) if hasattr(action, "require_citations") else True
                         )
+                        # --- YAML駆動の抽出（summary上で簡易抽出） ---
+                        extra_lines = []
+                        intent_name = detect_intent(user_text, locale="ja")
+                        if intent_name:
+                            for i, it in enumerate(items, 1):
+                                if "error" in it or it.get("is_pdf"):
+                                    continue
+                                text_for_extract = (it.get("summary") or "")
+                                extra = extract_from_read(intent_name, it.get("url",""), text_for_extract, locale="ja")
+                                if extra:
+                                    extra_lines.append(f"{i}. {extra}")
                         # systemメッセージとして積む（\s プレフィックス）
-                        result = f"\sWEB読み取り結果:\n{formatted}"
+                        result = f"\\sWEB読み取り結果:\n{formatted}"
+                        if extra_lines:
+                            result += "\n\n[抽出サマリ]\n" + "\n".join(extra_lines)
                 except Exception as e:
                     result = f"web.read の実行中にエラーが発生しました: {e}"
                 context_list.append(result)
-                # 続行（スキーマが返らなくなるまで）
-                if steps >= max_tool_steps:
+                # 続行
+                tool_runs += 1
+                if tool_runs >= max_tool_steps:
                     if trace_tool:
                         chain = " → ".join(tool_trace + ["response(max-step)"])
                         print(f"[trace] {chain}")
@@ -541,16 +601,65 @@ async def on_message(message: discord.Message):
             if action.tool == "web.image":
                 try:
                     async with message.channel.typing():
-                        # TODO: 実装ポイント
-                        # - action.image_urls を Vision API に渡す
-                        # - action.questions/tasks をヒントに解析
-                        # - 結果文字列を result に格納
-                        result = f"\s画像解析対象: {len(action.image_urls)}件（ひな形）"
+                        provider = auth_data["chat"]["provider"]
+                        model    = auth_data["vision"]["model"] if "vision" in auth_data else auth_data["chat"]["model"]
+                        api_key  = auth_data["vision"]["api_key"] if "vision" in auth_data and auth_data["vision"].get("api_key") else auth_data["chat"]["api_key"]
+
+                        # --- 重複起動ガード ---
+                        user_last = ""
+                        for m in reversed(context_list):
+                            if isinstance(m, str) and not m.startswith("\\s"):
+                                user_last = m
+                                break
+                        base_q = (user_last.strip() or "画像の内容を要約し、重要なポイントを箇条書きで説明してください。")
+
+                        urls = list((action.image_urls or [])[:8])
+                        sig = (tuple(urls), base_q)
+
+                        # thread-scoped cache
+                        last_sig = context_manager.get_meta(thread.id, "last_webimage_sig")
+                        if last_sig == sig:
+                            # 直近と同一 → 新規実行せず、続行（通常応答に任せる）
+                            result = "\\s画像解析は直前の結果を再利用してください。"
+                            context_list.append(result)
+                            tool_runs += 1
+                            continue
+                        context_manager.set_meta(thread.id, "last_webimage_sig", sig)
+                        # --- /重複起動ガード ---
+
+                        # tasks に応じて軽く補足（describe/tags/ocr/nsfw_check）
+                        extra = []
+                        tset = set((getattr(action, "tasks", None) or []))
+                        if "ocr" in tset:
+                            extra.append("画像から読めるテキストを正確に抽出してください。")
+                        if "tags" in tset:
+                            extra.append("主要オブジェクトを3〜7語のタグで抽出してください。")
+                        if "nsfw_check" in tset:
+                            extra.append("成人向け/露出過多の可能性を簡潔に評価してください。")
+                        # 言語ヒント
+                        lang = getattr(action, "language_hint", None) or "ja"
+                        extra.append("出力は" + ("日本語" if lang.startswith("ja") else "英語") + "で。")
+                        question = base_q + ("\n" + "\n".join(extra) if extra else "")
+
+                        # 実行
+                        urls = list((action.image_urls or [])[:8])  # 上限8枚
+                        if provider == "OpenAI":
+                            vision_text = await analyze_openai_vision(urls, question, api_key, model)
+                        elif provider == "Gemini":
+                            vision_text = await analyze_gemini_vision(urls, question, api_key, model)
+                        elif provider == "Claude":
+                            vision_text = await analyze_claude_vision(urls, question, api_key, model)
+
+                        # 次ターンの指針を明記（下のパッチ2とセット）
+                        result = f"\\s画像解析の結果:\n{vision_text}\n\\s[web.image->chat] 次の1ターンはツールを起動せず、上の結果だけを根拠にユーザーの直近の問いに簡潔に答えてください。"
+                        if printmsg or expmsg:
+                            _print(f"webimage result => {vision_text[:2000]}", printmsg, expmsg)
                 except Exception as e:
                     result = f"web.image の実行中にエラーが発生しました: {e}"
                 context_list.append(result)
                 # 続行
-                if steps >= max_tool_steps:
+                tool_runs += 1
+                if tool_runs >= max_tool_steps:
                     if trace_tool:
                         chain = " → ".join(tool_trace + ["response(max-step)"])
                         print(f"[trace] {chain}")
@@ -568,7 +677,19 @@ async def on_message(message: discord.Message):
         # モデルの癖で先頭に「 あいちゃぼ: 」が入った場合を除去
         if reply:
             reply = reply.replace("あいちゃぼ: ", "", 1)
+        # 生のツールJSONを最終送信しない保険
+        def _looks_like_tool_json(s: str) -> bool:
+            try:
+                import json
+                obj = json.loads(s)
+                return isinstance(obj, dict) and "tool" in obj
+            except Exception:
+                return False
+
+        if (not pending_files) and reply and _looks_like_tool_json(reply):
+            reply = "（内部処理が完了しませんでした。もう一度お試しください。）"
         text_chunks = _split_for_discord(reply or "", limit=DISCORD_MSG_LIMIT)
+
         # 添付がある場合：1通目に本文(先頭チャンク)＋最初の添付群、以降は本文/添付を順次
         if pending_files:
             file_chunks = list(_chunks(pending_files, 10))
@@ -616,6 +737,12 @@ async def on_thread_delete(thread: discord.Thread):
     thread_id = str(thread.id)
     guild_id = str(thread.guild.id)
 
+    # メタ情報クリア
+    try:
+        context_manager.clear_meta(thread.id)
+    except Exception:
+        pass
+
     if is_thread_managed(SERVICE_NAME, guild_id, thread_id):
         try:
             remove_thread_from_server(SERVICE_NAME, guild_id, thread_id)
@@ -640,7 +767,7 @@ async def on_message_delete(message):
 # ====== 起動/同期 ======
 @client.event
 async def on_ready():
-    print(f"✅ {client.user} としてログインしました。(Ctrl-Cで終了します)")
+    print(f"✅ {client.user} としてログインしました。")
 
     try:
         load_commands(tree, client, GUILD_OBJ)
@@ -654,6 +781,7 @@ async def on_ready():
             print("🚀 本番モード（グローバル）でコマンドを同期しました")
 
         # 参加していないサーバーの検出とクリーニング（サーバーID単位）
+        print("🔎 サーバー/スレッドの確認中...")
         existing_server_ids = {str(guild.id) for guild in client.guilds}
         thread_utils.clean_deleted_servers(SERVICE_NAME, existing_server_ids)
 
@@ -662,15 +790,33 @@ async def on_ready():
             server_id = str(guild.id)
             thread_ids = set()
 
-            # チャンネルごとのアーカイブ済みスレッド
+            # チャンネルごとの全スレッド
             for channel in guild.text_channels:
-                for thread in channel.threads:
-                    thread_ids.add(str(thread.id))
+                # アクティブなスレッド
+                for t in channel.threads:
+                    thread_ids.add(str(t.id))
+
+                # 公開アーカイブ
+                try:
+                    async for t in channel.archived_threads(limit=None):
+                        thread_ids.add(str(t.id))
+                except (discord.Forbidden, discord.HTTPException):
+                    pass
+
+                # 非公開アーカイブ（joined=True は「Botがメンバーの非公開スレ」）
+                for joined in (True, False):
+                    try:
+                        async for t in channel.archived_threads(private=True, joined=joined, limit=None):
+                            thread_ids.add(str(t.id))
+                    except (discord.Forbidden, discord.HTTPException, AttributeError):
+                        # 権限不足 or ライブラリ差異（古い版等）は握りつぶす
+                        pass
 
             # スレッド存在チェック用に記憶されたスレッド一覧をクリーンアップ
             thread_utils.clean_deleted_threads(SERVICE_NAME, server_id, thread_ids)
 
         print("✅ 存在しないサーバー/スレッドのチェックおよびクリーンアップを完了しました")
+        print("✅ 起動完了 (Ctrl-Cで終了します)")
 
     except Exception as e:
         print(f"❌ コマンド同期に失敗しました: {e}")

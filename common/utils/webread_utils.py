@@ -13,6 +13,51 @@ _DEFAULT_TIMEOUT = aiohttp.ClientTimeout(total=20)
 def _clean_whitespace(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip())
 
+def _filename_from_url(u: str) -> str:
+    m = re.search(r"/([^/?#]+)$", u or "")
+    return m.group(1) if m else ""
+
+def _is_html_ctype(ctype: str) -> bool:
+    s = (ctype or "").lower()
+    return ("text/html" in s) or ("application/xhtml" in s)
+
+def _is_text_like(ctype: str, url: str) -> bool:
+    s = (ctype or "").lower()
+    if s.startswith("text/"):
+        return True
+    if any(k in s for k in ["json", "javascript", "xml", "x-python", "x-script", "csv", "yaml", "toml"]):
+        return True
+    # URL拡張子で推定（Discord CDN は octet-stream になることがある）
+    path = (url or "").lower().split("?")[0]
+    for ext in (".py",".txt",".md",".json",".csv",".yml",".yaml",".toml",".ini",".cfg",".log",".rst"):
+        if path.endswith(ext):
+            return True
+    return False
+
+def _decode_text(raw: bytes) -> str:
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        try:
+            return raw.decode("cp932")
+        except UnicodeDecodeError:
+            return raw.decode("utf-8", errors="replace")
+
+def _summarize_code(txt: str, *, max_chars: int = 1200, max_lines: int = 60) -> str:
+    # コード/プレーンテキストは整形せず先頭を抜粋
+    out, total = [], 0
+    for line in (txt or "").splitlines():
+        ln = line.rstrip("\r")
+        n = len(ln) + 1
+        if (total + n > max_chars) or (len(out) >= max_lines):
+            break
+        out.append(ln)
+        total += n
+    body = "\n".join(out)
+    if len(body) < len(txt):
+        return "```text\n" + body + "\n...```"
+    return "```text\n" + body + "\n```"
+
 def _guess_published(doc: lxml_html.HtmlElement) -> Optional[str]:
     # 代表的な公開日メタを拾う
     X = doc.xpath
@@ -68,13 +113,13 @@ def _summarize(text: str, max_chars: int = 800) -> str:
         return text
     return text[: max_chars - 1] + "…"
 
-async def _fetch(session: aiohttp.ClientSession, url: str, max_bytes: int) -> Tuple[bytes, str]:
+async def _fetch(session: aiohttp.ClientSession, url: str, max_bytes: int) -> Tuple[bytes, str, int]:
     async with session.get(url, headers={"User-Agent": UA}, timeout=_DEFAULT_TIMEOUT, allow_redirects=True) as resp:
         ctype = resp.headers.get("Content-Type", "")
         raw = await resp.read()
         if max_bytes and len(raw) > max_bytes:
             raw = raw[:max_bytes]
-        return raw, ctype
+        return raw, ctype, resp.status
 
 def _parse_html(raw: bytes) -> Optional[lxml_html.HtmlElement]:
     try:
@@ -111,7 +156,7 @@ async def read_urls(
     max_chars: int = 20_000,
     follow_pdfs: bool = True,
     extract_images: bool = True,
-    analyze_images: bool = False,  # 解析自体は別ツールで
+    analyze_images: bool = False,  # TODO: 未実装、解析自体は別ツールで
     language_hint: Optional[str] = None,
     require_citations: bool = True,
 ) -> List[Dict[str, Any]]:
@@ -129,7 +174,10 @@ async def read_urls(
         if isinstance(item, Exception):
             results.append({"url": u, "error": str(item)})
             continue
-        raw, ctype = item
+        raw, ctype, status = item
+        if status >= 400:
+            results.append({"url": u, "error": f"HTTP {status}"})
+            continue
         is_pdf = ("application/pdf" in ctype.lower()) or u.lower().endswith(".pdf")
         if is_pdf:
             note = "PDF検出（本文抽出は未実装）"
@@ -139,8 +187,25 @@ async def read_urls(
             })
             continue
 
+        # ---- HTML 以外のテキスト/コードを先に処理 ----
+        if not _is_html_ctype(ctype) and _is_text_like(ctype, u):
+            txt = _decode_text(raw)
+            title = _filename_from_url(u) or "(text)"
+            summary = _summarize_code(txt, max_chars=min(1200, max_chars))
+            results.append({
+                "url": u,
+                "title": title,
+                "published": None,
+                "summary": summary,
+                "images": [],
+                "is_pdf": False
+            })
+            continue
+
+        # ---- HTML とみなして解析 ----
         doc = _parse_html(raw)
         if not doc:
+            # 非HTML・非テキスト（バイナリ等）は諦める
             results.append({"url": u, "error": "HTML解析に失敗"})
             continue
 

@@ -1,7 +1,11 @@
 # AIChaBo（AIChaBo/あいちゃぼ） 
 
-AIChaBo（あいちゃぼ）は、ユーザーの OpenAI API キーを使って Discord 上で ChatGPT / Gemini / Claude を利用できる Bot です。  
-構成は「UI層」「AI層」「共通層」に分かれており、将来的な多プラットフォーム対応を想定しています。
+AIChaBo（あいちゃぼ）は、ユーザーが発行した API キーを使って Discord 上で LLM ( ChatGPT / Gemini / Claude ) を利用できる Bot です。  
+構成は「UI層」「AI層」「共通層」に分かれており、将来的な多プラットフォーム対応を想定しています。（対応するとは言っていない）  
+
+利用者の認証情報に API キー を設定する仕組みのため、LLMの利用料は利用者が負担する形になります。  
+サーバー単位で利用者の認証情報を共有することもでき、その場合は共有元の利用者が利用料を負担することになります。  
+使用される認証情報は、利用者が設定した認証情報＞共有された認証情報 となっています。  
 
 ## 環境変数の設定（Discord用）
 
@@ -56,6 +60,7 @@ requirements.txt に含まれる主なライブラリ:
 - openai>=1.0.0
 - google-generativeai
 - anthropic
+- PyYAML>=6.0.1
 
 ```shell
 cp .env.example .env
@@ -143,6 +148,8 @@ AIChaBo は以下の /コマンドを提供しています：
 >| `-expall`           | 全スレッドのコンテキストリストを common/session/dump にエクスポート |
 >| `-expprompt`        | 現在使用中のプロンプトを common/session/dump にエクスポート         |
 >| `-loadprompt`       | プロンプトを再読み込み                                              |
+>| `-expintent`        | 現在使用中のインテント/辞書を common/session/dump にエクスポート    |
+>| `-loadintent`       | インテント/辞書を再読み込み                                         |
 >| `-printmsg:on/off`  | ONで、AIに投げるメッセージ内容をコンソールに出力                    |
 >| `-expmsg:on/off`    | ONで、AIに投げるメッセージ内容を common/session/dump に出力         |
 >| `-showopt`          | 設定されているオプションを表示                                      |
@@ -153,7 +160,6 @@ AIChaBo は以下の /コマンドを提供しています：
 | `/ac_invite`                   | あいちゃぼを現在のスレッドに招待します。                               |
 | `/ac_leave`                    | あいちゃぼを現在のスレッドから退出させます。                           |
 | `/ac_newtopic`                 | 新しくトピックを始めます。以前の会話内容は忘れます。                   |
-| `/ac_loadtopic`                | トピックを読み直します。過去メッセージを編集/削除した場合に使用します。|
 | `/ac_summary`                  | 現在のトピックを要約し、要約前の会話内容は忘れます。                   |
 
 ## 環境変数の設定（あいちゃぼ用）
