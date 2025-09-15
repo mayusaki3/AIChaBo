@@ -1,7 +1,11 @@
 # AIChaBo（AIChaBo/あいちゃぼ） 
 
-AIChaBo（あいちゃぼ）は、ユーザーが発行した API キーを使って Discord 上で ChatGPT / Gemini / Claude を利用できる Bot です。  
-構成は「UI層」「AI層」「共通層」に分かれており、将来的な多プラットフォーム対応を想定しています。
+AIChaBo（あいちゃぼ）は、ユーザーが発行した API キーを使って Discord 上で LLM ( ChatGPT / Gemini / Claude ) を利用できる Bot です。  
+構成は「UI層」「AI層」「共通層」に分かれており、将来的な多プラットフォーム対応を想定しています。（対応するとは言っていない）  
+
+利用者の認証情報に API キー を設定する仕組みのため、LLMの利用料は利用者が負担する形になります。  
+サーバー単位で利用者の認証情報を共有することもでき、その場合は共有元の利用者が利用料を負担することになります。  
+使用される認証情報は、利用者が設定した認証情報＞共有された認証情報 となっています。  
 
 ## 環境変数の設定（Discord用）
 
@@ -56,6 +60,7 @@ requirements.txt に含まれる主なライブラリ:
 - openai>=1.0.0
 - google-generativeai
 - anthropic
+- PyYAML>=6.0.1
 
 ```shell
 cp .env.example .env
