@@ -362,6 +362,12 @@ async def on_message(message: discord.Message):
     user_text += render_append_block(imgs, docs)
     context_list.append(user_text)
 
+    # ---- 前ターンの raw URL を持ち越さない（誤検出防止）----
+    try:
+        context_manager.set_meta(thread.id, "last_webread_urls", tuple())
+    except Exception:
+        pass
+
     # 非画像添付がある場合は、LLM を呼ぶ前に先に web.read 相当の読取りを実行し、
     # 要約を \s（system）として文脈に積む。二重実行防止のため signature でガード。
     if docs:
@@ -378,6 +384,45 @@ async def on_message(message: discord.Message):
     hint = build_tool_hint_auto(user_text, locale="ja")
     if hint:
         context_list.append("\\s " + hint)
+
+    # ---- GitHub Repo URL が含まれる場合は /repos と /git/trees を先読み（LLMに依存せず確実化）----
+    try:
+        intent_name_prefetch = detect_intent(user_text, locale="ja") or ""
+        if intent_name_prefetch == "github":
+            m = re.search(r"https?://github\\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)(?:/(?:tree|blob)/([A-Za-z0-9._/-]+))?", user_text)
+            if m:
+                owner_repo, ref = m.group(1), (m.group(2) or "").strip()
+                sig = (owner_repo, ref)
+                last_sig = context_manager.get_meta(thread.id, "gh_prefetch_sig")
+                if last_sig != sig:
+                    urls = [f"https://api.github.com/repos/{owner_repo}"]
+                    if ref:
+                        urls += [f"https://api.github.com/repos/{owner_repo}/git/trees/{ref}?recursive=1"]
+                    else:
+                        urls += [
+                            f"https://api.github.com/repos/{owner_repo}/git/trees/develop?recursive=1",
+                            f"https://api.github.com/repos/{owner_repo}/git/trees/main?recursive=1",
+                            f"https://api.github.com/repos/{owner_repo}/git/trees/master?recursive=1",
+                        ]
+                    async with message.channel.typing():
+                        items = await read_urls(
+                            urls[:8],  # 同時取得の上限に合わせる
+                            max_bytes=1_500_000, max_chars=20_000,
+                            follow_pdfs=True, extract_images=True, analyze_images=False,
+                            language_hint=None, require_citations=True,
+                        )
+                        formatted = format_read_results_for_llm(items, require_citations=True)
+                        # 直近の web.read URL を監査用に保持
+                        last_urls = [it.get("url") for it in items if isinstance(it, dict) and it.get("url")]
+                        try:
+                            context_manager.set_meta(thread.id, "last_webread_urls", tuple(last_urls))
+                            context_manager.set_meta(thread.id, "gh_prefetch_sig", sig)
+                        except Exception:
+                            pass
+                        context_list.append("\\s GitHub API 取得:\n" + formatted)
+    except Exception as e:
+        if server_session_manager.get_option(guild_id, "printmsg", False):
+            print(f"[prefetch][github] skipped: {e}")
 
     # オプション
     printmsg = server_session_manager.get_option(guild_id, "printmsg", False)
@@ -491,25 +536,32 @@ async def on_message(message: discord.Message):
             if action.tool == "web.search":
                 try:
                     async with message.channel.typing():
+                        # YAMLのsearch_defaultsを補完注入（LLMが未指定でも安定）
+                        intent_name = detect_intent(user_text, locale="ja") or ""
+                        defaults = get_search_defaults(intent_name, locale="ja") if intent_name else {}
+                        top_result = action.top_result or defaults.get("top_result", 5)
+                        region = action.region or defaults.get("region")
+                        recency_days = action.recency_days if action.recency_days is not None else defaults.get("recency_days")
+
                         search_results = await search_web(
                             queries=action.queries,
-                            top_result=action.top_result,
-                            recency_days=action.recency_days,
+                            top_result=top_result,
+                            recency_days=recency_days,
                             lang=action.lang,
-                            region=action.region,
+                            region=region,
                             timeout=15
                         )
                         if not search_results:
                             # --- YAML定義による汎用フォールバック ---
-                            intent_name = detect_intent(user_text, locale="ja") or ""
+                            intent_name = intent_name or detect_intent(user_text, locale="ja") or ""
                             if intent_name:
                                 dedup, recency_override = build_fallback_queries(intent_name, action.queries, locale="ja")
                                 try:
                                     search_results = await search_web(
                                         queries=dedup,
-                                        top_result=action.top_result or 5,
+                                        top_result=top_result,
                                         recency_days=recency_override,  # YAMLが指定すれば上書き
-                                        region=action.region or "jp-jp",
+                                        region=region or "jp-jp",
                                         require_citations=True,
                                     )
                                 except Exception:
@@ -556,6 +608,8 @@ async def on_message(message: discord.Message):
             if action.tool == "web.read":
                 try:
                     async with message.channel.typing():
+                        # （将来）Actionから渡されたHTTPヘッダを read_urls に橋渡し
+                        extra_headers = getattr(action, "headers", None) if hasattr(action, "headers") else None
                         items = await read_urls(
                             action.urls,
                             max_bytes = getattr(action, "max_bytes", 1_500_000) or 1_500_000,
@@ -565,11 +619,18 @@ async def on_message(message: discord.Message):
                             analyze_images = getattr(action, "analyze_images", False) if hasattr(action, "analyze_images") else False,
                             language_hint = getattr(action, "language_hint", None),
                             require_citations = getattr(action, "require_citations", True) if hasattr(action, "require_citations") else True,
+                            # headers=extra_headers,  # ← read_urlsが対応したら有効化
                         )
                         formatted = format_read_results_for_llm(
                             items,
                             require_citations = getattr(action, "require_citations", True) if hasattr(action, "require_citations") else True
                         )
+                        # 直近の web.read URL（監査/ガード用に保持）
+                        last_urls = [it.get("url") for it in items if isinstance(it, dict) and it.get("url")]
+                        try:
+                            context_manager.set_meta(thread.id, "last_webread_urls", tuple(last_urls))
+                        except Exception:
+                            pass
                         # --- YAML駆動の抽出（summary上で簡易抽出） ---
                         extra_lines = []
                         intent_name = detect_intent(user_text, locale="ja")
@@ -670,6 +731,29 @@ async def on_message(message: discord.Message):
         break
 
     # ===== 通常レスポンス送信 =====
+    def _violates_repo_evidence(reply_text: str, last_read_urls: list[str]) -> bool:
+        """
+        GitHubレビュー用の簡易ガード:
+        - 「ファイル別（最大8件）」の見出しがある
+        - かつ raw.githubusercontent.com を読んだ URL 数 < 箇条書きの件数（ざっくり）
+        → エビデンス不足とみなす
+        """
+        if not reply_text:
+            return False
+        # 対象セクション抽出：「ファイル別」〜「総評/根拠URL/末尾」
+        start = reply_text.find("ファイル別")
+        if start < 0:
+            start = reply_text.find("ファイル別（最大8件）")
+        if start < 0:
+            return False
+        end_candidates = [reply_text.find("総評", start), reply_text.find("根拠URL", start)]
+        end_candidates = [p for p in end_candidates if p >= 0]
+        end = min(end_candidates) if end_candidates else len(reply_text)
+        section = reply_text[start:end]
+        raw_count = sum(1 for u in (last_read_urls or []) if isinstance(u, str) and "raw.githubusercontent.com" in u)
+        # セクション内の箇条書きのみカウント
+        listed = sum(1 for line in section.splitlines() if line.lstrip().startswith(("-", "・")))
+        return raw_count < max(1, listed)
     if reply or pending_files:
         # オプション -printmsg:on, -expmsg:on 処理
         if printmsg or expmsg:
@@ -688,6 +772,20 @@ async def on_message(message: discord.Message):
 
         if (not pending_files) and reply and _looks_like_tool_json(reply):
             reply = "（内部処理が完了しませんでした。もう一度お試しください。）"
+        # --- GitHubレビューの“根拠(=raw)必須”ガード ---
+        try:
+            intent_name_for_guard = detect_intent(user_text, locale="ja") or ""
+            last_read_urls = context_manager.get_meta(thread.id, "last_webread_urls") or []
+            if intent_name_for_guard == "github" and _violates_repo_evidence(reply or "", list(last_read_urls)):
+                # 安全側に倒す：根拠不足の“ファイル別”は出力しない
+                proof = [u for u in last_read_urls if "raw.githubusercontent.com" in (u or "")][:8]
+                safe_msg = "対象拡張子のファイル本文（raw）が取得できていません。Tree/API の結果だけでは評価しません。\n" \
+                           "もう一度お試しください。（必要に応じて『続き』と指示すると次の8件を読みます）\n" \
+                           "根拠URL:\n" + "\n".join(f"  - {u}" for u in proof) if proof else \
+                           "対象拡張子のファイル本文（raw）が取得できていません。Tree/API の結果だけでは評価しません。"
+                reply = safe_msg
+        except Exception:
+            pass
         text_chunks = _split_for_discord(reply or "", limit=DISCORD_MSG_LIMIT)
 
         # 添付がある場合：1通目に本文(先頭チャンク)＋最初の添付群、以降は本文/添付を順次

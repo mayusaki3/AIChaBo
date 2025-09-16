@@ -32,6 +32,7 @@ from __future__ import annotations
 from pathlib import Path
 from functools import lru_cache
 from typing import Any, Dict, List, Tuple, Optional
+from collections import defaultdict
 import yaml
 import re
 from datetime import datetime, timedelta, timezone
@@ -39,7 +40,6 @@ from datetime import datetime, timedelta, timezone
 # ---- 環境定数 ----
 JST = timezone(timedelta(hours=9))
 CONFIG_DIR = Path("common/config")
-
 
 # =========================
 # YAML ロード & キャッシュ
@@ -277,36 +277,44 @@ def build_tool_hint_from_config(intent_name: str,
     norm_steps = cfg.get("text_normalizers", []) or []
     norm_text = _apply_text_normalizers(user_text, norm_steps) if norm_steps else (user_text or "")
 
-    # 3) 抽出（city など）
+    # 3) 抽出（city / owner_repo / ref / path / url / free_text など任意）
     fields = _extract_fields(norm_text,
                              cfg.get("extractors", []) or [],
                              cfg.get("aliases", {}) or {})
 
     # 4) 相対日付 → 具体日付の配列
     dates = _resolve_dates(user_text or "", cfg.get("date_rules", []) or [])
-    flags = {
-        "has_city": bool(fields.get("city")),
-        "has_date": bool(dates),
-    }
+    # 任意フィールドに対して has_<name> を自動付与（GitHub等のYAMLで利用）
+    flags: Dict[str, bool] = {"has_date": bool(dates)}
+    for k, v in fields.items():
+        flags[f"has_{k}"] = bool(v)
+    # 互換：weather系YAML向けの慣例フラグ
+    if "city" in fields:
+        flags["has_city"] = bool(fields.get("city"))
 
     # 5) クエリ生成（条件に合う最初のブロック）
     qs: List[str] = []
     max_q = int(cfg.get("max_queries", 3))
-    for block in cfg.get("query_templates", []) or []:
+    for block in (cfg.get("query_templates", []) or []):
         when = block.get("when", {}) or {}
         if all(flags.get(k) == v for k, v in when.items()):
             templates = block.get("queries", []) or []
             if flags["has_date"] and dates:
                 for dt in dates[:2]:
                     for t in templates:
-                        qs.append(t.format(date_ja=_fmt_date_jp(dt), **fields))
+                        safe = defaultdict(str, fields)
+                        safe["date_ja"] = _fmt_date_jp(dt)
+                        # 未定義キーは空文字で埋める安全フォーマット
+                        qs.append(t.format_map(safe))
                         if len(qs) >= max_q:
                             break
                     if len(qs) >= max_q:
                         break
             else:
                 for t in templates:
-                    qs.append(t.format(date_ja="", **fields))
+                    safe = defaultdict(str, fields)
+                    safe["date_ja"] = ""
+                    qs.append(t.format_map(safe))
                     if len(qs) >= max_q:
                         break
         if len(qs) >= max_q:

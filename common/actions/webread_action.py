@@ -9,6 +9,8 @@ class WebReadAction:
     tool: str
     urls: List[str]
     version: str = "1"
+    # 任意HTTPヘッダ（将来の認証/API用・後方互換のためオプショナル）
+    headers: Optional[Dict[str, str]] = None
     # 省略可パラメータ（将来の拡張向け。ひな形では未使用でもOK）
     follow_links: bool = False
     max_pages: int = 1
@@ -50,6 +52,11 @@ class WebReadAction:
             if not urls:
                 return None
 
+            # 任意ヘッダ（dict想定・不正なら無視）
+            headers = obj.get("headers")
+            if not isinstance(headers, dict):
+                headers = None
+
             return WebReadAction(
                 tool="web.read",
                 urls=urls,
@@ -61,6 +68,7 @@ class WebReadAction:
                 region=obj.get("region"),
                 success_message=obj.get("success_message"),
                 failure_message=obj.get("failure_message"),
+                headers=headers,
             )
         except Exception:
             return None
@@ -71,6 +79,7 @@ class WebReadAction:
             "tool": self.tool,
             "version": self.version,
             "urls": self.urls,
+            "headers": self.headers,
             "follow_links": self.follow_links,
             "max_pages": self.max_pages,
             "require_citations": self.require_citations,
@@ -97,6 +106,10 @@ class WebReadAction:
                     "items": {"type": "string", "format": "uri", "pattern": "^(https?)://"},
                     "minItems": 1,
                     "uniqueItems": True
+                },
+                "headers": {
+                    "type": "object",
+                    "additionalProperties": {"type": "string"}
                 },
                 "follow_links": {"type": "boolean", "default": False},
                 "max_pages": {"type": "integer", "minimum": 1, "maximum": 10, "default": 1},
