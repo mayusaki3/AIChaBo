@@ -42,7 +42,7 @@ extractors:
     type: regex
     pattern: "(https?://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:/(?:tree|blob)/[A-Za-z0-9._/-]+)?)"
 
-  # owner/repo（URLなし "owner/repo" 指定にも対応）
+  # owner/repo（URLなしの "owner/repo" 指定にも対応）
   - name: owner_repo
     type: regex
     pattern: "(?:github\\.com/)?([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)"
@@ -60,8 +60,7 @@ extractors:
     type: regex
     pattern: "(?:\\b(?:branch|ブランチ|ref|リファレンス|タグ|tag)[:：]?\\s*)([A-Za-z0-9._/-]{2,64})"
 
-  # ファイルパス（拡張子あり / 特殊ファイル含む）
-  # TLD(.com .org …)は除外。スキーム直後(https?://)も除外。
+  # ファイルパス（TLD除外・スキーム直後除外・特殊ファイル含む）
   - name: path
     type: regex
     pattern: "(?:^|\\s|/)((?!https?://)[A-Za-z0-9_./-]+\\.(?!com\\b|org\\b|net\\b|io\\b|co\\b|jp\\b)[A-Za-z0-9_.-]{1,16}|Dockerfile|docker-compose\\.ya?ml|Makefile|CMakeLists\\.txt|\\.github/workflows/[A-Za-z0-9_.-]+\\.ya?ml)"
@@ -79,7 +78,7 @@ search_defaults:
   top_result: 5
 
 query_templates:
-  # URLがあり、owner/repo が特定できるときは最初から API を読む
+  # URLがあり、owner/repo が特定できるときは最初から API を読む（HTMLは読まない）
   - when: { has_url: true, has_owner_repo: true, has_url_ref: true }
     queries:
       - "https://api.github.com/repos/{owner_repo}"
@@ -98,14 +97,14 @@ query_templates:
       - "https://raw.githubusercontent.com/{owner_repo}/{ref}/{path}"
       - "site:github.com/{owner_repo} {path}"
 
-  # owner/repo + ref（URLなし時：Tree → ついでに軽く検索）
+  # owner/repo + ref（URLなし時）
   - when: { has_owner_repo: true, has_ref: true, has_url: false }
     queries:
       - "https://api.github.com/repos/{owner_repo}/git/trees/{ref}?recursive=1"
       - "site:github.com/{owner_repo} inurl:{ref}"
       - "site:github.com/{owner_repo} {ref} README.md"
 
-  # owner/repo のみ（URLなし時：refを仮定してTreeを試行）
+  # owner/repo のみ（URLなし時）
   - when: { has_owner_repo: true, has_url: false }
     queries:
       - "https://api.github.com/repos/{owner_repo}/git/trees/develop?recursive=1"
@@ -130,9 +129,9 @@ hint_notes:
   - "URL が リポジトリのトップ or /tree/<ref> の場合：README.* を読む前に **Tree API** で対象ファイルを列挙する。"
 
   # --- default_branch 取得と Tree 再試行（main空振り対策） ---
-  - "ref 未指定のときは /git/trees/develop?recursive=1, /git/trees/main?recursive=1, /git/trees/master?recursive=1 を 同一の web.read（urls配列に3本）で同時取得し、成功した Tree から対象拡張子を抽出する（このターンでは“候補の列挙”までに留め、短評は raw 取得後の次ターンで出す）。"
-  - "まず https://api.github.com/repos/{owner_repo} を web.read し、JSONの default_branch を得る。ref 未指定なら default_branch を採用。"
-  - "Tree API（/git/trees/{ref}?recursive=1）で対象がゼロなら、develop→main→master の順に Tree API を再試行し、見つかった ref を採用。"
+  - "まず https://api.github.com/repos/{owner_repo} を web.read して JSON の default_branch を得る。ref 未指定なら default_branch を採用。"
+  - "Tree API（/git/trees/{ref}?recursive=1）で対象がゼロなら、develop→main→master の順に **Tree API を再試行**し、見つかった ref を採用。"
+  - "ref 未指定のときは `/git/trees/develop|main|master` を **同一の web.read（urls配列）で同時取得**してよい。"
 
   # --- 収集対象拡張子の決定（未指定ならデフォルト集合） ---
   - "ユーザーが『各py』『workflowも』『設定を』など明示した拡張子/種別を優先。未指定なら下記の和集合：
@@ -143,9 +142,7 @@ hint_notes:
      NB = {ipynb}
      SPECIAL = {Dockerfile, docker-compose.yml, Makefile, CMakeLists.txt, .github/workflows/*.yml}
      "
-
-  # --- Tree JSON の選別規則 ---
-  - "items[].path 抽出後、以下でフィルタ：
+  - "Tree JSON から items[].path を取り出し、以下でフィルタ：
      1) 拡張子 ∈ TARGET_EXTS または SPECIAL 名
      2) size ≤ 300000 bytes（約300KB）を優先。大きすぎるファイルはスキップ
      3) 除外: .git/, node_modules/, dist/, build/, venv/, .venv/, __pycache__/（workflow は .github/workflows のみ許可）
@@ -182,7 +179,6 @@ hint_notes:
      - 総評: 強み / リスク / 即改善3点
      - 根拠URL: - <raw/API の URL>（列挙）
      "
-
   - "Private リポは未認証では不可（必要なら PAT を用意）。検索は補助で、基本は URL/Tree → raw の直読を優先。"
 
 fallback:

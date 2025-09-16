@@ -407,9 +407,14 @@ async def on_message(message: discord.Message):
                     async with message.channel.typing():
                         items = await read_urls(
                             urls[:8],  # 同時取得の上限に合わせる
-                            max_bytes=1_500_000, max_chars=20_000,
-                            follow_pdfs=True, extract_images=True, analyze_images=False,
-                            language_hint=None, require_citations=True,
+                            max_bytes = 1_500_000,
+                            max_chars = 20_000,
+                            follow_pdfs = True,
+                            extract_images = True,
+                            analyze_images = False,
+                            language_hint = None,
+                            require_citations = True,
+                            headers = None,  # プリフェッチは認証不要/不明のためヘッダ無し
                         )
                         formatted = format_read_results_for_llm(items, require_citations=True)
                         # 直近の web.read URL を監査用に保持
@@ -619,7 +624,7 @@ async def on_message(message: discord.Message):
                             analyze_images = getattr(action, "analyze_images", False) if hasattr(action, "analyze_images") else False,
                             language_hint = getattr(action, "language_hint", None),
                             require_citations = getattr(action, "require_citations", True) if hasattr(action, "require_citations") else True,
-                            # headers=extra_headers,  # ← read_urlsが対応したら有効化
+                            headers = extra_headers,
                         )
                         formatted = format_read_results_for_llm(
                             items,
@@ -753,6 +758,8 @@ async def on_message(message: discord.Message):
         raw_count = sum(1 for u in (last_read_urls or []) if isinstance(u, str) and "raw.githubusercontent.com" in u)
         # セクション内の箇条書きのみカウント
         listed = sum(1 for line in section.splitlines() if line.lstrip().startswith(("-", "・")))
+        if listed == 0:
+            return False
         return raw_count < max(1, listed)
     if reply or pending_files:
         # オプション -printmsg:on, -expmsg:on 処理

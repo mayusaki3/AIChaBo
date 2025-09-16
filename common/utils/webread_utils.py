@@ -4,10 +4,11 @@ import re
 import asyncio
 import aiohttp
 from typing import List, Dict, Any, Optional, Tuple
+from urllib.parse import urlparse
 from lxml import html as lxml_html
 
 UA = "AIChaBoWebReader/1.0 (+https://github.com/mayusaki3/AIChaBo)"
-
+_GH_AUTH_HOSTS = {"api.github.com", "raw.githubusercontent.com"}
 _DEFAULT_TIMEOUT = aiohttp.ClientTimeout(total=20)
 
 def _clean_whitespace(s: str) -> str:
@@ -113,8 +114,24 @@ def _summarize(text: str, max_chars: int = 800) -> str:
         return text
     return text[: max_chars - 1] + "…"
 
-async def _fetch(session: aiohttp.ClientSession, url: str, max_bytes: int) -> Tuple[bytes, str, int]:
-    async with session.get(url, headers={"User-Agent": UA}, timeout=_DEFAULT_TIMEOUT, allow_redirects=True) as resp:
+def _build_request_headers(url: str, extra: Optional[Dict[str, str]]) -> Dict[str, str]:
+    base = {"User-Agent": UA}
+    if not extra:
+        return base
+    host = (urlparse(url).hostname or "").lower()
+    for k, v in extra.items():
+        if not v:
+            continue
+        if k.lower() == "authorization":
+            # 認証トークンは GitHub ドメインにのみ送る（漏えい防止）
+            if host in _GH_AUTH_HOSTS:
+                base["Authorization"] = v
+        else:
+            base[k] = v
+    return base
+
+async def _fetch(session: aiohttp.ClientSession, url: str, max_bytes: int, req_headers: Optional[Dict[str, str]] = None) -> Tuple[bytes, str, int]:
+    async with session.get(url, headers=_build_request_headers(url, req_headers), timeout=_DEFAULT_TIMEOUT, allow_redirects=True) as resp:
         ctype = resp.headers.get("Content-Type", "")
         raw = await resp.read()
         if max_bytes and len(raw) > max_bytes:
@@ -159,6 +176,7 @@ async def read_urls(
     analyze_images: bool = False,  # TODO: 未実装、解析自体は別ツールで
     language_hint: Optional[str] = None,
     require_citations: bool = True,
+    headers: Optional[Dict[str, str]] = None,
 ) -> List[Dict[str, Any]]:
     """各URLを取得して {title, url, published, summary, images, is_pdf, note} を返す。"""
     results: List[Dict[str, Any]] = []
@@ -167,7 +185,7 @@ async def read_urls(
     async with aiohttp.ClientSession(timeout=timeout, connector=conn) as session:
         tasks = []
         for u in urls[:8]:
-            tasks.append(_fetch(session, u, max_bytes))
+            tasks.append(_fetch(session, u, max_bytes, headers))
         fetched = await asyncio.gather(*tasks, return_exceptions=True)
 
     for u, item in zip(urls[:8], fetched):
