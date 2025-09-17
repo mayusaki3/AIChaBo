@@ -116,18 +116,23 @@ def _summarize(text: str, max_chars: int = 800) -> str:
 
 def _build_request_headers(url: str, extra: Optional[Dict[str, str]]) -> Dict[str, str]:
     base = {"User-Agent": UA}
-    if not extra:
-        return base
     host = (urlparse(url).hostname or "").lower()
-    for k, v in extra.items():
-        if not v:
-            continue
-        if k.lower() == "authorization":
-            # 認証トークンは GitHub ドメインにのみ送る（漏えい防止）
-            if host in _GH_AUTH_HOSTS:
-                base["Authorization"] = v
-        else:
-            base[k] = v
+
+    # GitHub API 標準ヘッダを常に付与（未指定でも）
+    if host == "api.github.com":
+        base["Accept"] = "application/vnd.github+json"
+        base["X-GitHub-Api-Version"] = "2022-11-28"
+
+    if extra:
+        for k, v in extra.items():
+            if not v:
+                continue
+            if k.lower() == "authorization":
+                # 認証トークンは GitHub ドメインにのみ送る（漏えい防止）
+                if host in _GH_AUTH_HOSTS:
+                    base["Authorization"] = v
+            else:
+                base[k] = v
     return base
 
 async def _fetch(session: aiohttp.ClientSession, url: str, max_bytes: int, req_headers: Optional[Dict[str, str]] = None) -> Tuple[bytes, str, int]:
@@ -193,8 +198,17 @@ async def read_urls(
             results.append({"url": u, "error": str(item)})
             continue
         raw, ctype, status = item
+        # 4xx/5xx 時の詳細メッセージ取り出し（GitHub API向け）
         if status >= 400:
-            results.append({"url": u, "error": f"HTTP {status}"})
+            msg = ""
+            try:
+                # JSON なら GitHub の "message" を拾う
+                import json as _json
+                msg = _json.loads(raw.decode("utf-8", errors="ignore")).get("message", "")
+            except Exception:
+                pass
+            note = f"HTTP {status}" + (f" — {msg}" if msg else "")
+            results.append({"url": u, "error": note})
             continue
         is_pdf = ("application/pdf" in ctype.lower()) or u.lower().endswith(".pdf")
         if is_pdf:

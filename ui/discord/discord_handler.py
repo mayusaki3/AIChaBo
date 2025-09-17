@@ -457,19 +457,105 @@ async def on_message(message: discord.Message):
                         if tree_urls:
                             items_tree = await read_urls(
                                 tree_urls,
-                                max_bytes=1_500_000, max_chars=20_000,
-                                follow_pdfs=True, extract_images=True, analyze_images=False,
-                                language_hint=None, require_citations=True,
+                                max_bytes = 1_500_000,
+                                max_chars = 20_000,
+                                follow_pdfs = True,
+                                extract_images = True,
+                                analyze_images = False,
+                                language_hint = None,
+                                require_citations = True,
+                                headers = headers,
                             )
-                        items_all = items_meta + items_tree
-                        formatted = format_read_results_for_llm(items_all, require_citations=True)
-                        last_urls.extend([it.get("url") for it in items_tree if isinstance(it, dict) and it.get("url")])
+                        # --- 3rd: Tree → raw へ自動フォローアップ（同ターン最大8件）
+                        prefetch_used_fallback = True
                         try:
-                            context_manager.set_meta(thread.id, "last_webread_urls", tuple(last_urls))
-                            context_manager.set_meta(thread.id, "gh_prefetch_sig", sig)
-                        except Exception:
-                            pass
-                        context_list.append("\\s GitHub API 取得:\n" + formatted)
+                            import json as _json
+                            TARGET_EXTS = {"py","js","ts","tsx","jsx","go","rs","java","kt","c","cpp","h","hpp","cs",
+                                        "yaml","yml","toml","json","ini","cfg","conf","md","mdx","rst","adoc",
+                                        "sh","zsh","bash","bat","ps1","ipynb"}
+                            EXCLUDE_DIRS = ("node_modules/","dist/","build/","venv/",".venv/","__pycache__/",".git/")
+                            SPECIAL = {"Dockerfile","docker-compose.yml","docker-compose.yaml","Makefile","CMakeLists.txt"}
+
+                            def _ok_path(p: str, size: int) -> bool:
+                                if any(seg in p for seg in EXCLUDE_DIRS): return False
+                                if size and size > 300_000: return False
+                                base = p.rsplit("/",1)[-1]
+                                if base in SPECIAL: return True
+                                if "." in base:
+                                    ext = base.rsplit(".",1)[-1].lower()
+                                    if ext in TARGET_EXTS and not base.endswith((".min.js",".bundle.js",".map")):
+                                        return True
+                                return False
+
+                            # owner_repo / ref は tree_urls から復元
+                            owner_repo, ref = None, None
+                            for u in tree_urls:
+                                m = re.search(r"api\\.github\\.com/repos/([^/]+/[^/]+)/git/trees/([^?]+)", u)
+                                if m:
+                                    owner_repo, ref = m.group(1), m.group(2)
+                                    break
+
+                            candidates = []
+                            for it in items_tree:
+                                u = it.get("url","")
+                                if "api.github.com/repos/" in u and "/git/trees/" in u:
+                                    txt = it.get("raw") or it.get("text") or it.get("summary") or ""
+                                    try:
+                                        obj = _json.loads(txt)
+                                        for node in obj.get("tree", []):
+                                            if node.get("type") != "blob":
+                                                continue
+                                            p = node.get("path","")
+                                            size = int(node.get("size") or 0)
+                                            if _ok_path(p, size):
+                                                candidates.append((p, size))
+                                    except Exception:
+                                        pass
+
+                            candidates = sorted(set(candidates), key=lambda t: (t[0].count("/"), t[1] or 0))[:8]
+                            raw_urls = [f"https://raw.githubusercontent.com/{owner_repo}/{ref}/{p}" for p,_ in candidates] if (owner_repo and ref) else []
+
+                            if raw_urls:
+                                # 認証ヘッダ（あれば）
+                                token = os.getenv("GITHUB_TOKEN")
+                                headers2 = {"Authorization": f"Bearer {token}"} if token else None
+
+                                items_raw = await read_urls(
+                                    raw_urls,
+                                    max_bytes=1_500_000, max_chars=20_000,
+                                    follow_pdfs=True, extract_images=True, analyze_images=False,
+                                    language_hint=None, require_citations=True,
+                                    headers=headers2,
+                                )
+                                # 既存まとめにマージし、文脈に積む
+                                items_all = items_meta + items_tree + items_raw
+                                formatted = format_read_results_for_llm(items_all, require_citations=True)
+                                last_urls.extend([it.get("url") for it in items_raw if isinstance(it, dict) and it.get("url")])
+                                try:
+                                    context_manager.set_meta(thread.id, "last_webread_urls", tuple(last_urls))
+                                    context_manager.set_meta(thread.id, "gh_prefetch_sig", sig)
+                                except Exception:
+                                    pass
+                                context_list.append("\\s GitHub API 取得(raw):\n" + formatted)
+                                prefetch_used_fallback = False
+                            else:
+                                # raw が拾えなかった場合は従来どおり
+                                items_all = items_meta + items_tree
+                                formatted = format_read_results_for_llm(items_all, require_citations=True)
+                        except Exception as e:
+                            if server_session_manager.get_option(guild_id, "printmsg", False):
+                                print(f"[prefetch][github raw follow-up skipped] {e}")
+                        # raw まで行けた場合は重複追記を避ける
+                        if prefetch_used_fallback:
+                            items_all = items_meta + items_tree
+                            formatted = format_read_results_for_llm(items_all, require_citations=True)
+                            last_urls.extend([it.get("url") for it in items_tree if isinstance(it, dict) and it.get("url")])
+                            try:
+                                context_manager.set_meta(thread.id, "last_webread_urls", tuple(last_urls))
+                                context_manager.set_meta(thread.id, "gh_prefetch_sig", sig)
+                            except Exception:
+                                pass
+                            context_list.append("\\s GitHub API 取得:\n" + formatted)
     except Exception as e:
         if server_session_manager.get_option(guild_id, "printmsg", False):
             print(f"[prefetch][github] skipped: {e}")
@@ -664,6 +750,21 @@ async def on_message(message: discord.Message):
                             token = os.getenv("GITHUB_TOKEN")  # もしくは auth_data["github"]["token"]
                             if token:
                                 extra_headers = {"Authorization": f"Bearer {token}"}
+
+                        # --- LLM生成URLのサニタイズ: GitHub Tree API で /repos 抜けを補正 ---
+                        def _fix_github_urls(urls):
+                            fixed = []
+                            for u in (urls or []):
+                                if isinstance(u, str):
+                                    # Tree API なのに /repos/ が欠けている誤URLを補正
+                                    if u.startswith("https://api.github.com/") and "/git/trees/" in u and "/repos/" not in u:
+                                        u = u.replace("https://api.github.com/", "https://api.github.com/repos/", 1)
+                                fixed.append(u)
+                            return fixed
+
+                        action_urls = getattr(action, "urls", None) if hasattr(action, "urls") else None
+                        if action_urls:
+                            action.urls = _fix_github_urls(action_urls)
                         items = await read_urls(
                             action.urls,
                             max_bytes = getattr(action, "max_bytes", 1_500_000) or 1_500_000,
