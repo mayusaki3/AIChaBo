@@ -215,6 +215,7 @@ async def read_urls(
                 "title": title,
                 "published": None,
                 "summary": summary,
+                "raw": txt,
                 "images": [],
                 "is_pdf": False
             })
@@ -244,6 +245,7 @@ async def read_urls(
             "title": title,
             "published": published,
             "summary": summary,
+            "text": main,
             "images": images,
             "is_pdf": False
         })

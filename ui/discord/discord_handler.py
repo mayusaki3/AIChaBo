@@ -391,22 +391,22 @@ async def on_message(message: discord.Message):
         if intent_name_prefetch == "github":
             m = re.search(r"https?://github\\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)(?:/(?:tree|blob)/([A-Za-z0-9._/-]+))?", user_text)
             if m:
-                owner_repo, ref = m.group(1), (m.group(2) or "").strip()
-                sig = (owner_repo, ref)
+                owner_repo, user_ref = m.group(1), (m.group(2) or "").strip()
+                if user_ref and "/" in user_ref:
+                    user_ref = user_ref.split("/", 1)[0]
+                sig = (owner_repo, user_ref)
                 last_sig = context_manager.get_meta(thread.id, "gh_prefetch_sig")
                 if last_sig != sig:
-                    urls = [f"https://api.github.com/repos/{owner_repo}"]
-                    if ref:
-                        urls += [f"https://api.github.com/repos/{owner_repo}/git/trees/{ref}?recursive=1"]
-                    else:
-                        urls += [
-                            f"https://api.github.com/repos/{owner_repo}/git/trees/develop?recursive=1",
-                            f"https://api.github.com/repos/{owner_repo}/git/trees/main?recursive=1",
-                            f"https://api.github.com/repos/{owner_repo}/git/trees/master?recursive=1",
-                        ]
                     async with message.channel.typing():
-                        items = await read_urls(
-                            urls[:8],  # 同時取得の上限に合わせる
+                        # --- 1st: /repos + /branches を取得して実在ブランチを把握 ---
+                        meta_urls = [
+                            f"https://api.github.com/repos/{owner_repo}",
+                            f"https://api.github.com/repos/{owner_repo}/branches?per_page=100",
+                        ]
+                        token = os.getenv("GITHUB_TOKEN")
+                        headers = {"Authorization": f"Bearer {token}"} if token else None
+                        items_meta = await read_urls(
+                            meta_urls,
                             max_bytes = 1_500_000,
                             max_chars = 20_000,
                             follow_pdfs = True,
@@ -414,11 +414,56 @@ async def on_message(message: discord.Message):
                             analyze_images = False,
                             language_hint = None,
                             require_citations = True,
-                            headers = None,  # プリフェッチは認証不要/不明のためヘッダ無し
+                            headers = headers,
                         )
-                        formatted = format_read_results_for_llm(items, require_citations=True)
-                        # 直近の web.read URL を監査用に保持
-                        last_urls = [it.get("url") for it in items if isinstance(it, dict) and it.get("url")]
+                        # 既読URLを保持
+                        last_urls = [it.get("url") for it in items_meta if isinstance(it, dict) and it.get("url")]
+                        # ブランチ名の抽出
+                        import json
+                        branches = set()
+                        default_branch = None
+                        for it in items_meta:
+                            u = it.get("url") or ""
+                            body = it.get("raw") or it.get("text") or it.get("summary") or ""
+                            # summary(コードフェンス)しか無い場合に備えてJSONっぽく整形
+                            if body.startswith("```"):
+                                import re as _re
+                                body = _re.sub(r"^```[a-zA-Z]*\n", "", body)
+                                body = _re.sub(r"\n```$", "", body)
+                            try:
+                                obj = json.loads(body)
+                            except Exception:
+                                obj = None
+                            if "repos/" in u and obj and isinstance(obj, dict):
+                                default_branch = obj.get("default_branch") or default_branch
+                            if "/branches" in u and isinstance(obj, list):
+                                for b in obj:
+                                    name = (b.get("name") or "").strip()
+                                    if name:
+                                        branches.add(name)
+                        # 候補順の決定（ユーザー指定 > default > よくある名前 > その他）
+                        preferred = ["develop", "main", "master", "trunk"]
+                        order = []
+                        if user_ref: order.append(user_ref)
+                        if default_branch: order.append(default_branch)
+                        order += [b for b in preferred if b in branches]
+                        order += sorted(branches - set(order))
+                        # --- 2nd: 上位候補（最大2〜3）について Tree を取得 ---
+                        tree_urls = [
+                            f"https://api.github.com/repos/{owner_repo}/git/trees/{r}?recursive=1"
+                            for r in order[:3]
+                        ]
+                        items_tree = []
+                        if tree_urls:
+                            items_tree = await read_urls(
+                                tree_urls,
+                                max_bytes=1_500_000, max_chars=20_000,
+                                follow_pdfs=True, extract_images=True, analyze_images=False,
+                                language_hint=None, require_citations=True,
+                            )
+                        items_all = items_meta + items_tree
+                        formatted = format_read_results_for_llm(items_all, require_citations=True)
+                        last_urls.extend([it.get("url") for it in items_tree if isinstance(it, dict) and it.get("url")])
                         try:
                             context_manager.set_meta(thread.id, "last_webread_urls", tuple(last_urls))
                             context_manager.set_meta(thread.id, "gh_prefetch_sig", sig)
@@ -615,6 +660,10 @@ async def on_message(message: discord.Message):
                     async with message.channel.typing():
                         # （将来）Actionから渡されたHTTPヘッダを read_urls に橋渡し
                         extra_headers = getattr(action, "headers", None) if hasattr(action, "headers") else None
+                        if not extra_headers and detect_intent(user_text, locale="ja") == "github":
+                            token = os.getenv("GITHUB_TOKEN")  # もしくは auth_data["github"]["token"]
+                            if token:
+                                extra_headers = {"Authorization": f"Bearer {token}"}
                         items = await read_urls(
                             action.urls,
                             max_bytes = getattr(action, "max_bytes", 1_500_000) or 1_500_000,
@@ -636,6 +685,88 @@ async def on_message(message: discord.Message):
                             context_manager.set_meta(thread.id, "last_webread_urls", tuple(last_urls))
                         except Exception:
                             pass
+                        # --- GitHub: Tree→raw の自動フォローアップ（同ターン最大8件） ---
+                        try:
+                            intent_name = detect_intent(user_text, locale="ja") or ""
+                            if intent_name == "github":
+                                sources = [u for u in last_urls if isinstance(u, str)]
+                                has_tree = any(("api.github.com/repos/" in u and "/git/trees/" in u) for u in sources)
+                                has_raw  = any(("raw.githubusercontent.com" in u) for u in sources)
+                                if has_tree and not has_raw:
+                                    import re, json
+                                    # 1) owner_repo/ref を Tree API のURLから決定
+                                    owner_repo, ref = None, None
+                                    for u in sources:
+                                        m = re.search(r"api\\.github\\.com/repos/([^/]+/[^/]+)/git/trees/([^?]+)", u)
+                                        if m:
+                                            owner_repo, ref = m.group(1), m.group(2)
+                                            break
+                                    # 2) Tree JSON から候補pathを抽出
+                                    TARGET_EXTS = { "py","js","ts","tsx","jsx","go","rs","java","kt","c","cpp","h","hpp","cs",
+                                                    "yaml","yml","toml","json","ini","cfg","conf","md","mdx","rst","adoc",
+                                                    "sh","zsh","bash","bat","ps1","ipynb" }
+                                    EXCLUDE_DIRS = ("node_modules/","dist/","build/","venv/",".venv/","__pycache__/",".git/")
+                                    SPECIAL = {"Dockerfile","docker-compose.yml","docker-compose.yaml","Makefile","CMakeLists.txt"}
+                                    def _ok_path(p:str, size:int)->bool:
+                                        if any(seg in p for seg in EXCLUDE_DIRS): return False
+                                        if size and size>300_000: return False
+                                        base = p.rsplit("/",1)[-1]
+                                        if base in SPECIAL: return True
+                                        if "." in base:
+                                            ext = base.rsplit(".",1)[-1].lower()
+                                            if ext in TARGET_EXTS and not base.endswith((".min.js",".bundle.js",".map")):
+                                                return True
+                                        return False
+                                    candidates = []
+                                    for it in items:
+                                        u = it.get("url","")
+                                        if "api.github.com/repos/" in u and "/git/trees/" in u:
+                                            txt = it.get("raw") or it.get("text") or it.get("summary") or ""
+                                            try:
+                                                obj = json.loads(txt)
+                                                for node in obj.get("tree", []):
+                                                    if node.get("type") != "blob": 
+                                                        continue
+                                                    p = node.get("path","")
+                                                    size = int(node.get("size") or 0)
+                                                    if _ok_path(p, size):
+                                                        candidates.append((p, size))
+                                            except Exception:
+                                                continue
+                                    # 優先度：浅いパス優先 → 小さいサイズ優先
+                                    candidates = sorted(set(candidates), key=lambda t: (t[0].count("/"), t[1] or 0))[:8]
+                                    raw_urls = []
+                                    if owner_repo and ref:
+                                        raw_urls = [f"https://raw.githubusercontent.com/{owner_repo}/{ref}/{p}" for p,_ in candidates]
+                                    # 3) raw を追加読取
+                                    if raw_urls:
+                                        # 認証ヘッダ（必要なら自動補完）
+                                        extra_headers2 = getattr(action, "headers", None) if hasattr(action, "headers") else None
+                                        if not extra_headers2:
+                                            token = os.getenv("GITHUB_TOKEN")
+                                            if token:
+                                                extra_headers2 = {"Authorization": f"Bearer {token}"}
+                                        items_raw = await read_urls(
+                                            raw_urls,
+                                            max_bytes = getattr(action, "max_bytes", 1_500_000) or 1_500_000,
+                                            max_chars = getattr(action, "max_chars", 20_000) or 20_000,
+                                            follow_pdfs = True,
+                                            extract_images = True,
+                                            analyze_images = False,
+                                            language_hint = getattr(action, "language_hint", None),
+                                            require_citations = True,
+                                            headers = extra_headers2,
+                                        )
+                                        items.extend(items_raw)
+                                        formatted = format_read_results_for_llm(items, require_citations=True)
+                                        last_urls.extend([it.get("url") for it in items_raw if isinstance(it, dict) and it.get("url")])
+                                        try:
+                                            context_manager.set_meta(thread.id, "last_webread_urls", tuple(last_urls))
+                                        except Exception:
+                                            pass
+                        except Exception as _e:
+                            if printmsg or expmsg:
+                                _print(f"[github raw follow-up skipped] {_e}", printmsg, expmsg)
                         # --- YAML駆動の抽出（summary上で簡易抽出） ---
                         extra_lines = []
                         intent_name = detect_intent(user_text, locale="ja")

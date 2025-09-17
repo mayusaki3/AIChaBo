@@ -19,17 +19,17 @@ triggers:
     - コミット
     - ブランチ
     - タグ
-    - 確認して
-    - 評価して
-    - レビュー
-    - 診断
-    - 品質
     - 設定
     - コンフィグ
     - workflow
     - ワークフロー
     - ドキュメント
     - 使い方
+    - 確認して
+    - 評価して
+    - レビュー
+    - 診断
+    - 品質
 
 text_normalizers:
   - op: regex_replace
@@ -78,35 +78,37 @@ search_defaults:
   top_result: 5
 
 query_templates:
-  # URLがあり、owner/repo が特定できるときは最初から API を読む（HTMLは読まない）
+  # URLがあり、owner/repo が特定でき ref も判明
   - when: { has_url: true, has_owner_repo: true, has_url_ref: true }
     queries:
       - "https://api.github.com/repos/{owner_repo}"
       - "https://api.github.com/repos/{owner_repo}/git/trees/{ref}?recursive=1"
 
+  # URLがあり、owner/repo は特定できるが ref 不明
   - when: { has_url: true, has_owner_repo: true }
     queries:
       - "https://api.github.com/repos/{owner_repo}"
-      - "https://api.github.com/repos/{owner_repo}/git/trees/develop?recursive=1"
-      - "https://api.github.com/repos/{owner_repo}/git/trees/main?recursive=1"
-      - "https://api.github.com/repos/{owner_repo}/git/trees/master?recursive=1"
+      - "https://api.github.com/repos/{owner_repo}/branches?per_page=100"
 
-  # owner/repo + ref + path（URLなし時の単一ファイル直読候補）
+  # URLなしで owner/repo + ref + path（単一ファイル直読候補）
   - when: { has_owner_repo: true, has_ref: true, has_path: true, has_url: false }
     queries:
       - "https://raw.githubusercontent.com/{owner_repo}/{ref}/{path}"
       - "site:github.com/{owner_repo} {path}"
 
-  # owner/repo + ref（URLなし時）
+  # URLなしで owner/repo + ref（Tree から候補列挙）
   - when: { has_owner_repo: true, has_ref: true, has_url: false }
     queries:
       - "https://api.github.com/repos/{owner_repo}/git/trees/{ref}?recursive=1"
       - "site:github.com/{owner_repo} inurl:{ref}"
       - "site:github.com/{owner_repo} {ref} README.md"
 
-  # owner/repo のみ（URLなし時）
+  # URLなしで owner/repo のみ（まず /repos + /branches で実在ブランチを把握）
   - when: { has_owner_repo: true, has_url: false }
     queries:
+      - "https://api.github.com/repos/{owner_repo}"
+      - "https://api.github.com/repos/{owner_repo}/branches?per_page=100"
+      # フォールバック（決め打ち Tree は最後に試す）
       - "https://api.github.com/repos/{owner_repo}/git/trees/develop?recursive=1"
       - "https://api.github.com/repos/{owner_repo}/git/trees/main?recursive=1"
       - "https://api.github.com/repos/{owner_repo}/git/trees/master?recursive=1"
@@ -126,83 +128,17 @@ hint_notes:
   # --- URL入力時 ---
   - "URL が含まれている場合は **web.read を直接**使用（検索を挟まない）。"
   - "blob: https://github.com/<o>/<r>/blob/<ref>/<path> → raw: https://raw.githubusercontent.com/<o>/<r>/<ref>/<path> に置換して web.read。"
-  - "URL が リポジトリのトップ or /tree/<ref> の場合：README.* を読む前に **Tree API** で対象ファイルを列挙する。"
+  - "URL がリポジトリのトップ or /tree/<ref> の場合：README.* を読む前に **Tree API** で対象ファイルを列挙する。"
 
-  # --- default_branch 取得と Tree 再試行（main空振り対策） ---
-  - "まず https://api.github.com/repos/{owner_repo} を web.read して JSON の default_branch を得る。ref 未指定なら default_branch を採用。"
-  - "Tree API（/git/trees/{ref}?recursive=1）で対象がゼロなら、develop→main→master の順に **Tree API を再試行**し、見つかった ref を採用。"
-  - "ref 未指定のときは `/git/trees/develop|main|master` を **同一の web.read（urls配列）で同時取得**してよい。"
+  # --- default_branch 取得と Tree 再試行 ---
+  - "まず https://api.github.com/repos/{owner_repo} と /branches?per_page=100 を web.read し、default_branch と実在ブランチ一覧を取得。"
+  - "候補順は ①ユーザー指定 ref ②default_branch ③{develop, main, master, trunk} の順に存在するもの ④他ブランチ名（昇順）。上位2〜3件の /git/trees/{ref}?recursive=1 を読む。"
+  - "Tree で対象拡張子を抽出したら、https://raw.githubusercontent.com/{owner_repo}/{ref}/{path} に変換して **同ターンで最大8件** web.read。"
 
   # --- 収集対象拡張子の決定（未指定ならデフォルト集合） ---
   - "ユーザーが『各py』『workflowも』『設定を』など明示した拡張子/種別を優先。未指定なら下記の和集合：
      CODE = {py, js, ts, tsx, jsx, go, rs, java, kt, c, cpp, h, hpp, cs}
      CONFIG = {yaml, yml, toml, json, ini, cfg, conf}
      DOCS = {md, mdx, rst, adoc}
-     SHELL = {sh, zsh, bash, bat, ps1}
-     NB = {ipynb}
-     SPECIAL = {Dockerfile, docker-compose.yml, Makefile, CMakeLists.txt, .github/workflows/*.yml}
-     "
-  - "Tree JSON から items[].path を取り出し、以下でフィルタ：
-     1) 拡張子 ∈ TARGET_EXTS または SPECIAL 名
-     2) size ≤ 300000 bytes（約300KB）を優先。大きすぎるファイルはスキップ
-     3) 除外: .git/, node_modules/, dist/, build/, venv/, .venv/, __pycache__/（workflow は .github/workflows のみ許可）
-     4) 除外: *.min.js, *.bundle.js, *.map
-     優先度（同点なら直下に近いもの優先）：
-     ① critical: src/, app/, server/, client/, common/, core/, ui/, actions/, utils/, config/
-     ② workflows: .github/workflows/*.yml
-     ③ 依存定義: requirements.txt, pyproject.toml, poetry.lock, Pipfile, package.json, pnpm-lock.yaml, package-lock.json
-     ④ その他
-     "
-
-  # --- 読み込み（raw直読）とバッチング ---
-  - "抽出 path を https://raw.githubusercontent.com/{owner_repo}/{ref}/{path} に変換。"
-  - "1ターンあたり **最大8件** を urls 配列で web.read（= 2回目の web.read）。**自然文を書く前に必ず実行**。残りは『続き』で処理。"
-
-  # --- 厳格な“エビデンス必須”ガード（出力規則） ---
-  - "厳守: 『ファイル別（最大8件）』の箇条書きは、同一ターン内に **raw.githubusercontent.com** を web.read 済みのファイル **だけ**を書く。"
-  - "検証: 箇条書き件数 ≤ 『根拠URL』に列挙した **raw.githubusercontent.com** の件数。満たせない場合は『対象拡張子のファイルが見つかりませんでした（Sources参照）』とだけ返す。"
-  - "禁止: **api.github.com しか読んでいない状態**で具体的なファイル名（例: src/*.py）を書くこと。"
-
-  # --- 拡張子別の評価観点（各ファイル＝1行短評） ---
-  - "CODE系（py/js/ts/…）：役割 / 例外粒度 / ロギング / 型注釈（ts/py） / I/O・副作用 / テスト/CI痕跡 / 即改善案"
-  - "CONFIG系（yaml/yml/toml/json/…）：スキーマ整合 / コメント可読性 / 秘匿情報 / 環境差分 / 冪等性 / 即改善案"
-  - "DOCS系（md/…）：目的/使い方 / セットアップ / 動作要件 / バッジ鮮度 / 更新日 / 即改善案"
-  - "SHELL/バッチ（sh/ps1/bat）：set -e/pipefail 等 / 権限・パス / 依存固定 / ログ / 即改善案"
-  - "Workflow（.github/workflows/*.yml）：トリガー妥当性 / キャッシュ / シークレット / マトリクス / 失敗時通知 / 即改善案"
-  - "Notebook（ipynb）：依存固定 / 再現手順 / 入出力分離 / 大出力抑制 / 乱数固定 / 即改善案"
-
-  # --- 出力フォーマット（検証可能） ---
-  - "出力：
-     - 概要: <一文>
-     - 対象拡張子: <例: py, yaml, md>
-     - ファイル別（最大8件）: 'path/to/file — <短評>' 箇条書き
-     - 総評: 強み / リスク / 即改善3点
-     - 根拠URL: - <raw/API の URL>（列挙）
-     "
-  - "Private リポは未認証では不可（必要なら PAT を用意）。検索は補助で、基本は URL/Tree → raw の直読を優先。"
-
-fallback:
-  recency_days: 3650
-  limit: 3
-  steps:
-    - name: relax
-      op: strip_site_filter
-    - name: widen
-      op: replace
-      pairs:
-        - [" inurl:pull", ""]
-        - [" inurl:issues", ""]
-        - [" README", " readme"]
-
-read_extract_patterns:
-  - domain: "api.github.com"
-    fields:
-      note: "Repo/Tree JSON（default_branch / items[].path 抽出）"
-  - domain: "raw.githubusercontent.com"
-    fields:
-      note: "plain source（先頭~2000字を要約対象、評価は1行短評）"
-  - domain: "github.com"
-    focus_contains: ["README", "Issue", "Pull Request", "Code", "Files", "commits"]
-    fields:
-      issue_number_regex: "#(\\d+)"
-      pr_number_regex:    "#(\\d+)"
+     SCRIPTS = {sh, zsh, bash, bat, ps1}
+     SPECIAL = {Dockerfile, docker-compose.yml, docker-compose.yaml, Makefile, CMakeLists.txt, .github/workflows/*.yml}"
