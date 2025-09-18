@@ -26,7 +26,7 @@ async def ac_newtopiccommand(interaction: Interaction):
     context_manager.clear_context(thread.id)
     await thread.send(
         f"💬/ac_newtopic: 新しくトピックを始めます。以前の会話内容は忘れます。\n"
-        f"・取り消す場合は、このメッセージを削除してから /ac_loadtopic を実行してください。"
+        f"・取り消す場合は、このメッセージを削除してください。"
     )
 
     await interaction.followup.send("✅ 新しいトピックを始めました。", ephemeral=True)

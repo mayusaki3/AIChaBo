@@ -75,7 +75,7 @@ async def ac_summarycommand(interaction: Interaction):
 
     await thread.send(
         f"💬/ac_summary: 要約した内容で新しくトピックを始めます。\n"
-        f"・取り消す場合は、このメッセージを削除してから /ac_loadtopic を実行してください。\n"
+        f"・取り消す場合は、このメッセージを削除してください。\n"
         f"{reply}"
     )
     context_manager.reset_context(thread.id)

@@ -243,6 +243,35 @@ def _split_for_discord(text: str, limit: int = DISCORD_MSG_LIMIT) -> list[str]:
                 out.append(c[i:i+limit])
     return out
 
+# --- 続き予告の空振り抑止（「続けますね」「少々お待ちください」→ ユーザー誘導） ---
+_CONTINUE_PAT = re.compile(
+    r"(すぐに続けますね。?|少々お待ちください。?|続けますね。?|続けます。?|続きます。?)"
+)
+
+def _sanitize_continuation_phrases(text: str, will_auto_continue: bool) -> str:
+    """
+    ・この返信の直後にボットの追投稿（本文/添付）が無い場合、
+      「続けます」「少々お待ちください」等を「続けますか？」に置換する。
+    ・will_auto_continue=True のときは無改変。
+    """
+    if not isinstance(text, str) or not text:
+        return text
+    if will_auto_continue:
+        return text
+    return _CONTINUE_PAT.sub("続けますか？（必要なら『続けて』と送ってください）", text)
+
+def _apply_sanitizer_to_chunks(chunks, will_auto_continue: bool):
+    """
+    テキストチャンク配列に連続表現抑止フィルタを適用
+    """
+    out = []
+    for t in (chunks or []):
+        if t:
+            out.append(_sanitize_continuation_phrases(t, will_auto_continue))
+        else:
+            out.append(t)
+    return out
+ 
 # ====== メッセージ処理（AIスレッド） ======
 @client.event
 async def on_message(message: discord.Message):
@@ -1026,6 +1055,15 @@ async def on_message(message: discord.Message):
         except Exception:
             pass
         text_chunks = _split_for_discord(reply or "", limit=DISCORD_MSG_LIMIT)
+
+        # 直後の追投稿（本文/添付）があるかを判定し、無い場合は継続予告をユーザー誘導に置換
+        if pending_files:
+            file_chunks = list(_chunks(pending_files, 10))
+            will_auto_continue = (len(text_chunks or []) > 1) or (len(file_chunks) > 1)
+            text_chunks = _apply_sanitizer_to_chunks(text_chunks, will_auto_continue)
+        else:
+            will_auto_continue = (len(text_chunks or []) > 1)
+            text_chunks = _apply_sanitizer_to_chunks(text_chunks, will_auto_continue)
 
         # 添付がある場合：1通目に本文(先頭チャンク)＋最初の添付群、以降は本文/添付を順次
         if pending_files:

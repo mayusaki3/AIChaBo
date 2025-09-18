@@ -12,133 +12,91 @@ triggers:
     - コード
     - 参照
     - Issue
-    - Issues
-    - PR
     - Pull Request
-    - プルリク
-    - コミット
     - ブランチ
-    - タグ
-    - 設定
-    - コンフィグ
-    - workflow
-    - ワークフロー
-    - ドキュメント
-    - 使い方
-    - 確認して
-    - 評価して
-    - レビュー
-    - 診断
-    - 品質
+    - develop
+    - main
+    - master
 
-text_normalizers:
-  - op: regex_replace
-    pattern: "\\s+"
-    replace: " "
+# URLから owner/repo/ref を抽出
+url_patterns:
+  - type: github
+    regexes:
+      # 例: https://github.com/owner/repo
+      - "^https?://github\\.com/(?P<owner>[^/]+)/(?P<repo>[^/#?]+)(?:$|[?#].*)"
+      # 例: https://github.com/owner/repo/tree/branch/path...
+      - "^https?://github\\.com/(?P<owner>[^/]+)/(?P<repo>[^/#?]+)/tree/(?P<ref>[^/#?]+)(?:/.*)?$"
+      # 例: https://raw.githubusercontent.com/owner/repo/ref/path/to/file.py
+      - "^https?://raw\\.githubusercontent\\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+)/(?P<ref>[^/]+)/.+$"
+      # API 経由（保険）
+      - "^https?://api\\.github\\.com/repos/(?P<owner>[^/]+)/(?P<repo>[^/]+)(?:/.*)?$"
 
-extractors:
-  # 例: https://github.com/owner/repo[/tree/<ref>[/path] | /blob/<ref>/<path>]
-  - name: url
-    type: regex
-    pattern: "(https?://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:/(?:tree|blob)/[A-Za-z0-9._/-]+)?)"
+entity_extractors:
+  owner_repo:
+    from: url
+    format: "{owner}/{repo}"
+  ref:
+    from: url
+    optional: true
 
-  # owner/repo（URLなしの "owner/repo" 指定にも対応）
-  - name: owner_repo
-    type: regex
-    pattern: "(?:github\\.com/)?([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)"
+defaults:
+  # 既定の候補順: 指定ref > defaultBranch > develop > main > master
+  fallback_refs: ["develop", "main", "master"]
+  max_raw_files: 8
+  allow_exts: [".py", ".md", ".txt", ".yml", ".yaml", ".json"]
 
-  # URL から ref を抽出（/tree/<ref> or /blob/<ref>/...）
-  - name: url_ref
-    type: regex
-    pattern: "github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/(?:tree|blob)/([A-Za-z0-9._/-]+)"
-    post:
-      - op: to_field
-        name: ref
-
-  # 明示キーワード付き ref（自由語は拾わない）
-  - name: ref
-    type: regex
-    pattern: "(?:\\b(?:branch|ブランチ|ref|リファレンス|タグ|tag)[:：]?\\s*)([A-Za-z0-9._/-]{2,64})"
-
-  # ファイルパス（TLD除外・スキーム直後除外・特殊ファイル含む）
-  - name: path
-    type: regex
-    pattern: "(?:^|\\s|/)((?!https?://)[A-Za-z0-9_./-]+\\.(?!com\\b|org\\b|net\\b|io\\b|co\\b|jp\\b)[A-Za-z0-9_.-]{1,16}|Dockerfile|docker-compose\\.ya?ml|Makefile|CMakeLists\\.txt|\\.github/workflows/[A-Za-z0-9_.-]+\\.ya?ml)"
-
-  # フリーテキスト（常に全文キャプチャ）
-  - name: free_text
-    type: regex
-    pattern: "([\\s\\S]+)"
-
-max_queries: 4
-
-search_defaults:
-  region: "global"
-  recency_days: null
-  top_result: 5
+assistant_rules:
+  - "根拠となるURLやAPI応答に基づき、**要約の末尾に出典（URL）**を示す。"
+  - "このメッセージ直後に自分の**追投稿が無い場合**、『すぐに続けますね』『少々お待ちください』『続けます/続きます』の類は**使用しない**。代わりに**『続けますか？』**とユーザーの投稿を促す。"
+  - "本文を省略する場合、コードブロック外に**（長文のため一部省略）**などの補足を置く。"
+  - "日本語で簡潔・要点先行。差分や一覧は必要に応じてコードブロックで表示する。"
 
 query_templates:
-  # URLがあり、owner/repo が特定でき ref も判明
+  # URLあり + owner/repo + ref特定
   - when: { has_url: true, has_owner_repo: true, has_url_ref: true }
     queries:
       - "https://api.github.com/repos/{owner_repo}"
+      - "https://api.github.com/repos/{owner_repo}/branches"
       - "https://api.github.com/repos/{owner_repo}/git/trees/{ref}?recursive=1"
 
-  # URLがあり、owner/repo は特定できるが ref 不明
-  - when: { has_url: true, has_owner_repo: true }
+  # URLあり + owner/repo まで分かる（ref不明）
+  - when: { has_url: true, has_owner_repo: true, has_url_ref: false }
     queries:
       - "https://api.github.com/repos/{owner_repo}"
-      - "https://api.github.com/repos/{owner_repo}/branches?per_page=100"
+      - "https://api.github.com/repos/{owner_repo}/branches"
 
-  # URLなしで owner/repo + ref + path（単一ファイル直読候補）
-  - when: { has_owner_repo: true, has_ref: true, has_path: true, has_url: false }
-    queries:
-      - "https://raw.githubusercontent.com/{owner_repo}/{ref}/{path}"
-      - "site:github.com/{owner_repo} {path}"
-
-  # URLなしで owner/repo + ref（Tree から候補列挙）
-  - when: { has_owner_repo: true, has_ref: true, has_url: false }
-    queries:
-      - "https://api.github.com/repos/{owner_repo}/git/trees/{ref}?recursive=1"
-      - "site:github.com/{owner_repo} inurl:{ref}"
-      - "site:github.com/{owner_repo} {ref} README.md"
-
-  # URLなしで owner/repo のみ（まず /repos + /branches で実在ブランチを把握）
-  - when: { has_owner_repo: true, has_url: false }
+  # テキストのみ（owner/repo 指定あり）
+  - when: { has_owner_repo: true }
     queries:
       - "https://api.github.com/repos/{owner_repo}"
-      - "https://api.github.com/repos/{owner_repo}/branches?per_page=100"
-      # フォールバック（決め打ち Tree は最後に試す）
-      - "https://api.github.com/repos/{owner_repo}/git/trees/develop?recursive=1"
-      - "https://api.github.com/repos/{owner_repo}/git/trees/main?recursive=1"
-      - "https://api.github.com/repos/{owner_repo}/git/trees/master?recursive=1"
-      - "site:github.com/{owner_repo} README"
-      - "site:github.com/{owner_repo} inurl:issues"
-      - "site:github.com/{owner_repo} inurl:pull"
+      - "https://api.github.com/repos/{owner_repo}/branches"
 
-  # 汎用（URLなし時のみ）
-  - when: { has_url: false }
-    queries:
-      - "site:github.com {free_text}"
-      - "site:github.com inurl:issues {free_text}"
-      - "site:github.com inurl:pull {free_text}"
-      - "site:raw.githubusercontent.com {free_text}"
+followup_hints:
+  # meta 取得後: ref 決定 → tree → raw 本文
+  - step: "pick-ref"
+    details: |
+      指定refが無ければ default_branch を優先し、無ければ {fallback_refs} の順に試す。
+  - step: "read-tree"
+    details: |
+      "https://api.github.com/repos/{owner_repo}/git/trees/{ref}?recursive=1"
+      からファイル一覧を取得し、{allow_exts} を優先して最大 {max_raw_files} 件まで Raw を読む。
+  - step: "read-raw"
+    details: |
+      "https://raw.githubusercontent.com/{owner_repo}/{ref}/{path}" で本文を取得。
+      1ファイルごとに 4000 文字程度を上限に要約し、出典URLを添付する。
+  - step: "finish"
+    details: |
+      直後に追投稿が無い場合は、本文の末尾で『続けますか？（必要なら「続けて」と送ってください）』と促す。
 
-hint_notes:
-  # --- URL入力時 ---
-  - "URL が含まれている場合は **web.read を直接**使用（検索を挟まない）。"
-  - "blob: https://github.com/<o>/<r>/blob/<ref>/<path> → raw: https://raw.githubusercontent.com/<o>/<r>/<ref>/<path> に置換して web.read。"
-  - "URL がリポジトリのトップ or /tree/<ref> の場合：README.* を読む前に **Tree API** で対象ファイルを列挙する。"
+output_templates:
+  - name: "summary"
+    when: { }
+    format: |
+      # 解析結果（{owner_repo}@{ref}）
+      - 取得ファイル数: {n_files} 件
+      - 主な変更点/観点: {highlights}
 
-  # --- default_branch 取得と Tree 再試行 ---
-  - "まず https://api.github.com/repos/{owner_repo} と /branches?per_page=100 を web.read し、default_branch と実在ブランチ一覧を取得。"
-  - "候補順は ①ユーザー指定 ref ②default_branch ③{develop, main, master, trunk} の順に存在するもの ④他ブランチ名（昇順）。上位2〜3件の /git/trees/{ref}?recursive=1 を読む。"
-  - "Tree で対象拡張子を抽出したら、https://raw.githubusercontent.com/{owner_repo}/{ref}/{path} に変換して **同ターンで最大8件** web.read。"
+      {per_file_sections}
 
-  # --- 収集対象拡張子の決定（未指定ならデフォルト集合） ---
-  - "ユーザーが『各py』『workflowも』『設定を』など明示した拡張子/種別を優先。未指定なら下記の和集合：
-     CODE = {py, js, ts, tsx, jsx, go, rs, java, kt, c, cpp, h, hpp, cs}
-     CONFIG = {yaml, yml, toml, json, ini, cfg, conf}
-     DOCS = {md, mdx, rst, adoc}
-     SCRIPTS = {sh, zsh, bash, bat, ps1}
-     SPECIAL = {Dockerfile, docker-compose.yml, docker-compose.yaml, Makefile, CMakeLists.txt, .github/workflows/*.yml}"
+      出典:
+      {citations}

@@ -56,7 +56,8 @@ def _summarize_code(txt: str, *, max_chars: int = 1200, max_lines: int = 60) -> 
         total += n
     body = "\n".join(out)
     if len(body) < len(txt):
-        return "```text\n" + body + "\n...```"
+        # コードブロックは正しく閉じ、補足はブロック外に置く
+        return "```text\n" + body + "\n```\n（長文のため一部省略）"
     return "```text\n" + body + "\n```"
 
 def _guess_published(doc: lxml_html.HtmlElement) -> Optional[str]:

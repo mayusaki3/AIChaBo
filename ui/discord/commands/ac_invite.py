@@ -22,19 +22,34 @@ async def ac_invite_command(interaction: Interaction):
         return
 
     try:
-        if thread.owner_id != interaction.client.user.id:
-            # Botがスレッド作成者でない場合
-            if thread.is_private() and interaction.user.id != thread.owner_id:
-                await interaction.followup.send("⚠️ プライベートスレッドであいちゃぼを招待するには、スレッド作成者である必要があります。", ephemeral=True)
-                return
+        # public/private を堅牢に判定
+        is_private = (
+            (hasattr(thread, "is_private") and callable(getattr(thread, "is_private")) and thread.is_private()) or
+            (getattr(thread, "type", None) == ChannelType.private_thread)
+        )
 
-            # Botが招待できるか試行
+        if not is_private:
+            # Public thread: Bot は join で参加
+            await thread.join()
+        else:
+            # Private thread: オーナーのみ Bot を招待可能
+            if interaction.user.id != thread.owner_id:
+                await interaction.followup.send(
+                    "⚠️ プライベートスレッドであいちゃぼを招待するには、スレッド作成者である必要があります。",
+                    ephemeral=True
+                )
+                return
+            # Bot を private に招待（Member を優先）
+            bot_member = interaction.guild.me if interaction.guild else None
             try:
-                await thread.add_user(interaction.client.user)
+                await thread.add_user(bot_member or interaction.client.user)
             except discord.Forbidden:
-                await interaction.followup.send("⚠️ あいちゃぼを招待する権限がありません。\n@あいちゃぼ に memtion してから再実行してください。", ephemeral=True)
+                await interaction.followup.send(
+                    "⚠️ あいちゃぼを招待する権限がありません。\n@あいちゃぼ に mention してから再実行してください。",
+                    ephemeral=True
+                )
                 return
-
+ 
         add_thread_to_server(SERVICE_NAME, interaction.guild_id, thread.id)
         await interaction.followup.send("✅ あいちゃぼをこのスレッドに招待しました。", ephemeral=True)
         await thread.send(
