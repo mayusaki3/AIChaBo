@@ -1,0 +1,7 @@
+providers:
+  - name: github
+    class: common.plugins.github:GitHubPlugin
+    domains:
+      - github.com
+      - api.github.com
+      - raw.githubusercontent.com

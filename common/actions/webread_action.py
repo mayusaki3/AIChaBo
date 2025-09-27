@@ -1,8 +1,8 @@
+import json
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, List, Dict, Any
 from urllib.parse import urlparse
-import json
 
 @dataclass
 class WebReadAction:
