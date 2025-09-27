@@ -8,7 +8,6 @@ from urllib.parse import urlparse
 from lxml import html as lxml_html
 
 UA = "AIChaBoWebReader/1.0 (+https://github.com/mayusaki3/AIChaBo)"
-_GH_AUTH_HOSTS = {"api.github.com", "raw.githubusercontent.com"}
 _DEFAULT_TIMEOUT = aiohttp.ClientTimeout(total=20)
 
 def _clean_whitespace(s: str) -> str:
@@ -116,23 +115,14 @@ def _summarize(text: str, max_chars: int = 800) -> str:
     return text[: max_chars - 1] + "…"
 
 def _build_request_headers(url: str, extra: Optional[Dict[str, str]]) -> Dict[str, str]:
+    """
+    汎用I/O層：特定サービス(GitHub等)の暗黙ヘッダは付与しない。
+    認証・特殊ヘッダは呼び出し元（=各プラグイン）で明示的に指定する。
+    """
     base = {"User-Agent": UA}
-    host = (urlparse(url).hostname or "").lower()
-
-    # GitHub API 標準ヘッダを常に付与（未指定でも）
-    if host == "api.github.com":
-        base["Accept"] = "application/vnd.github+json"
-        base["X-GitHub-Api-Version"] = "2022-11-28"
-
     if extra:
         for k, v in extra.items():
-            if not v:
-                continue
-            if k.lower() == "authorization":
-                # 認証トークンは GitHub ドメインにのみ送る（漏えい防止）
-                if host in _GH_AUTH_HOSTS:
-                    base["Authorization"] = v
-            else:
+            if v:
                 base[k] = v
     return base
 

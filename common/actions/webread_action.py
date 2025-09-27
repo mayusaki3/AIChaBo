@@ -4,6 +4,10 @@ from dataclasses import dataclass
 from typing import Optional, List, Dict, Any
 from urllib.parse import urlparse
 
+from common.plugins.dispatcher import try_handle_by_plugin
+from common.plugins.base import ReadRequest, ReadResponse, PluginResult
+from common.utils.webread_utils import read_urls, format_read_results_for_llm
+
 @dataclass
 class WebReadAction:
     tool: str
@@ -134,3 +138,59 @@ class WebReadAction:
                 }
             ],
         }
+
+    # ---- 実行メソッド（プラグイン優先 → 不一致なら従来read） ----
+    async def execute(self, user_text: str) -> str:
+        """
+        1) URLに合致する Provider Plugin を優先実行（GitHub等のサービス固有ロジック）
+        2) プラグイン不一致なら汎用の read_urls で取得 → LLM向け整形
+        """
+        # プラグイン用：ReadRequest → read_urls の1件実行をアダプト
+        async def _run_webread(reqs: list[ReadRequest]) -> list[ReadResponse]:
+            out: list[ReadResponse] = []
+            for r in reqs:
+                items = await read_urls([r.url], headers=r.headers or {})
+                it = items[0] if items else {"url": r.url, "error": "no result"}
+                out.append(ReadResponse(
+                    url=it.get("url", r.url),
+                    status=200 if "error" not in it else 500,
+                    headers={},
+                    body_text=it.get("raw") or it.get("text") or it.get("summary") or "",
+                    body_bytes=None,
+                    tag=r.tag,
+                ))
+            return out
+
+        # --- 1) プラグイン優先 ---
+        pr = await try_handle_by_plugin(user_text, self.urls, _run_webread)
+        if pr:
+            return self._render_plugin_result(pr)
+
+        # --- 2) フォールバック：従来の汎用 read ---
+        items = await read_urls(
+            self.urls,
+            headers=self.headers or {},
+            require_citations=self.require_citations,
+        )
+        return format_read_results_for_llm(items, require_citations=self.require_citations)
+
+    def _render_plugin_result(self, pr: PluginResult) -> str:
+        # GitHubプラグイン例：raw本文があれば抜粋＋出典、なければ items/citations を列挙
+        files = []
+        for it in pr.items:
+            if it.get("type") == "github_raw_files":
+                files = it.get("files", [])
+                break
+        if files:
+            parts = []
+            for f in files:
+                path = f.get("path", "")
+                url = f.get("url", "")
+                content = (f.get("content") or "")[:1200]
+                parts.append(f"### {path}\n```text\n{content}\n```\n出典: {url}")
+            return "\n\n".join(parts) + ("\n\n" + "\n".join(pr.citations) if pr.citations else "")
+        # raw 無し：構造をそのまま表示（必要ならここを好みの書式に）
+        body = "取得結果:\n" + "\n".join([str(x) for x in pr.items])
+        if pr.citations:
+            body += "\n\n出典:\n" + "\n".join(pr.citations)
+        return body
