@@ -10,9 +10,9 @@ OPENAI_IMAGEGEN_ENDPOINT = "https://api.openai.com/v1/images/generations"
 async def call_chatgpt(context_list: list[dict], api_key: str, model: str = "gpt-3.5-turbo", max_tokens: int = 1024) -> str:
     messages = []
     for msg in context_list:
-        if msg.startswith("\s"):
-            messages.append({"role": "system", "content": msg.replace("\s", "", 1).strip()})
-        else:   
+        if msg.startswith("\\s"):
+            messages.append({"role": "system", "content": msg.replace("\\s", "", 1).strip()})
+        else:
             if msg.startswith("AIChatBot:"):
                 messages.append({"role": "assistant", "content": msg.replace("AIChatBot:", "", 1).strip()})
             else:

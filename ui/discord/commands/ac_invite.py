@@ -25,7 +25,7 @@ async def ac_invite_command(interaction: Interaction):
         # public/private を堅牢に判定
         is_private = (
             (hasattr(thread, "is_private") and callable(getattr(thread, "is_private")) and thread.is_private()) or
-            (getattr(thread, "type", None) == ChannelType.private_thread)
+            (getattr(thread, "type", None) == discord.ChannelType.private_thread)
         )
 
         if not is_private:

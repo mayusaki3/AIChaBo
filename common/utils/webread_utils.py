@@ -189,16 +189,27 @@ async def read_urls(
             results.append({"url": u, "error": str(item)})
             continue
         raw, ctype, status = item
-        # 4xx/5xx 時の詳細メッセージ取り出し（GitHub API向け）
+        # 4xx/5xx 時の詳細メッセージ取り出し（汎用）
         if status >= 400:
-            msg = ""
+            note = f"HTTP {status}"
+            # 可能なら JSON を軽く読んで代表的なエラーフィールドを拾う
             try:
-                # JSON なら GitHub の "message" を拾う
                 import json as _json
-                msg = _json.loads(raw.decode("utf-8", errors="ignore")).get("message", "")
+                payload = _json.loads(raw.decode("utf-8", errors="ignore"))
+                # よくあるキーを優先順で探索
+                for key in ("message", "error", "detail", "error_description", "title"):
+                    if isinstance(payload, dict) and payload.get(key):
+                        note = f"{note} — {str(payload.get(key))[:300]}"
+                        break
             except Exception:
-                pass
-            note = f"HTTP {status}" + (f" — {msg}" if msg else "")
+                # JSONでない場合は、先頭数百文字だけ拾う
+                try:
+                    snippet = raw.decode("utf-8", errors="ignore")[:300]
+                    snippet = " ".join(snippet.split())
+                    if snippet:
+                        note = f"{note} — {snippet}"
+                except Exception:
+                    pass
             results.append({"url": u, "error": note})
             continue
         is_pdf = ("application/pdf" in ctype.lower()) or u.lower().endswith(".pdf")

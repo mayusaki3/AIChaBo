@@ -1,8 +1,8 @@
-import json
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, List, Dict, Any
 from urllib.parse import urlparse
+import json
 
 from common.plugins.dispatcher import try_handle_by_plugin
 from common.plugins.base import ReadRequest, ReadResponse, PluginResult
@@ -175,22 +175,40 @@ class WebReadAction:
         return format_read_results_for_llm(items, require_citations=self.require_citations)
 
     def _render_plugin_result(self, pr: PluginResult) -> str:
-        # GitHubプラグイン例：raw本文があれば抜粋＋出典、なければ items/citations を列挙
+        """
+        プラグイン非依存の汎用レンダラ:
+          1) display_text があればそれを採用
+          2) items の中に files(list[{path/url/content?...}]) があれば抜粋＋出典を表示
+          3) それ以外は items のダンプ＋ citations を表示
+        """
+        # 1) プラグインが直接テキストを返している場合
+        if getattr(pr, "display_text", None):
+            base = str(pr.display_text)
+            if pr.citations:
+                base += "\n\n出典:\n" + "\n".join(pr.citations)
+            return base
+
+        # 2) files を持つitemを探す（type名に依存しない）
         files = []
-        for it in pr.items:
-            if it.get("type") == "github_raw_files":
-                files = it.get("files", [])
+        for it in pr.items or []:
+            cand = it.get("files")
+            if isinstance(cand, list) and cand:
+                files = cand
                 break
         if files:
             parts = []
             for f in files:
-                path = f.get("path", "")
+                path = f.get("path") or f.get("name") or "(no name)"
                 url = f.get("url", "")
                 content = (f.get("content") or "")[:1200]
-                parts.append(f"### {path}\n```text\n{content}\n```\n出典: {url}")
-            return "\n\n".join(parts) + ("\n\n" + "\n".join(pr.citations) if pr.citations else "")
-        # raw 無し：構造をそのまま表示（必要ならここを好みの書式に）
-        body = "取得結果:\n" + "\n".join([str(x) for x in pr.items])
+                parts.append(f"### {path}\n```text\n{content}\n```\n出典: {url}" if url else f"### {path}\n```text\n{content}\n```")
+            body = "\n\n".join(parts)
+            if pr.citations:
+                body += "\n\n出典:\n" + "\n".join(pr.citations)
+            return body
+
+        # 3) 汎用ダンプ
+        body = "取得結果:\n" + "\n".join([str(x) for x in (pr.items or [])])
         if pr.citations:
             body += "\n\n出典:\n" + "\n".join(pr.citations)
         return body

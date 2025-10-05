@@ -57,7 +57,7 @@ async def ac_summarycommand(interaction: Interaction):
 
     # Discord と同じメッセージ形式（先頭に system を置く）
     message_list: list[str] = []
-    message_list.append("\s" + summary_sys)
+    message_list.append("\\s" + summary_sys)
     for mm in hist:
         message_list.append(mm["message"])
 
