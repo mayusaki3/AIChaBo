@@ -9,6 +9,20 @@ from lxml import html as lxml_html
 
 UA = "AIChaBoWebReader/1.0 (+https://github.com/mayusaki3/AIChaBo)"
 _DEFAULT_TIMEOUT = aiohttp.ClientTimeout(total=20)
+LLM_AUTH_HOSTS = {
+    "api.openai.com","oai.ai","api.anthropic.com",
+    "generativelanguage.googleapis.com","ai.googleusercontent.com",
+    "openai.azure.com","models.inference.ai.azure.com",
+}
+GITHUB_HOSTS = {"github.com","api.github.com","raw.githubusercontent.com"}
+_SECRET_PATS = [r"sk-[A-Za-z0-9]{20,}", r"anthropic-[A-Za-z0-9_\\-]{20,}", r"AIza[0-9A-Za-z_\\-]{20,}"]
+def redact(s: str) -> str:
+    if not isinstance(s,str) or not s: return s
+    import re as _re
+    out = s
+    for pat in _SECRET_PATS:
+       out = _re.sub(pat, lambda m: m.group(0)[:4]+"…"+m.group(0)[-4:], out)
+    return out
 
 def _clean_whitespace(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip())
@@ -120,9 +134,17 @@ def _build_request_headers(url: str, extra: Optional[Dict[str, str]]) -> Dict[st
     認証・特殊ヘッダは呼び出し元（=各プラグイン）で明示的に指定する。
     """
     base = {"User-Agent": UA}
+    host = (urlparse(url).hostname or "").lower()
     if extra:
         for k, v in extra.items():
-            if v:
+            if not v: continue
+            if k.lower()=="authorization":
+                # GitHubは常に拒否（公開のみ運用）、LLM先のみ許可
+                if host in GITHUB_HOSTS: 
+                    continue
+                if host in LLM_AUTH_HOSTS:
+                    base["Authorization"] = v
+            else:
                 base[k] = v
     return base
 
@@ -199,12 +221,12 @@ async def read_urls(
                 # よくあるキーを優先順で探索
                 for key in ("message", "error", "detail", "error_description", "title"):
                     if isinstance(payload, dict) and payload.get(key):
-                        note = f"{note} — {str(payload.get(key))[:300]}"
+                        note = f"{note} — {redact(str(payload.get(key))[:300])}"
                         break
             except Exception:
                 # JSONでない場合は、先頭数百文字だけ拾う
                 try:
-                    snippet = raw.decode("utf-8", errors="ignore")[:300]
+                    snippet = redact(raw.decode("utf-8", errors="ignore")[:300])
                     snippet = " ".join(snippet.split())
                     if snippet:
                         note = f"{note} — {snippet}"

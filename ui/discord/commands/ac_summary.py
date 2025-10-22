@@ -6,6 +6,9 @@ from common.session.prompt_loader import read_snippet_for_ctx
 from common.utils.thread_utils import is_thread_managed
 from ui.discord.discord_thread_context import context_manager
 from ai.openai.openai_api import call_chatgpt
+from ai.claude.claude_api import call_claude_chat
+from ai.gemini.gemini_api import call_gemini_chat
+from common.utils.webread_utils import redact
 
 HELP_TEXT = {
     "usage": "/ac_summary",
@@ -63,20 +66,37 @@ async def ac_summarycommand(interaction: Interaction):
 
     # LLM 呼び出し
     reply = ""
-
-    # OpenAIの場合
-    if auth_data["chat"]["provider"] == "OpenAI":
-        reply = await call_chatgpt(
-            message_list,
-            auth_data["chat"]["api_key"],
-            auth_data["chat"]["model"],
-            auth_data["chat"].get("max_tokens", 2048),
-        )
+    provider = auth_data["chat"]["provider"]
+    try:
+        if provider == "OpenAI":
+            reply = await call_chatgpt(
+                message_list,
+                auth_data["chat"]["api_key"],
+                auth_data["chat"]["model"],
+                auth_data["chat"].get("max_tokens", 2048),
+            )
+        elif provider == "Claude":
+            reply = await call_claude_chat(
+                message_list,
+                auth_data["chat"]["api_key"],
+                auth_data["chat"]["model"],
+                auth_data["chat"].get("max_tokens", 2048),
+            )
+        elif provider == "Gemini":
+            reply = await call_gemini_chat(
+               message_list,
+                auth_data["chat"]["api_key"],
+                auth_data["chat"]["model"],
+                auth_data["chat"].get("max_tokens", 2048),
+            )
+    except Exception as e:
+        await interaction.followup.send(f"❌ 要約の生成に失敗しました: {redact(str(e))}", ephemeral=True)
+        return
 
     await thread.send(
         f"💬/ac_summary: 要約した内容で新しくトピックを始めます。\n"
         f"・取り消す場合は、このメッセージを削除してください。\n"
-        f"{reply}"
+        f"{redact(reply)}"
     )
     context_manager.reset_context(thread.id)
     await interaction.followup.send("✅ ここまでの内容を要約しました。")

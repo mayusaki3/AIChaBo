@@ -2,6 +2,7 @@ import json
 import discord
 from discord import app_commands, Interaction
 from common.utils import jsonc
+from common.utils.webread_utils import redact
 
 from common.session.user_session_manager import user_session_manager
 # プロンプトの読み込みを /ac_auth 成功時に実行
@@ -72,7 +73,7 @@ async def ac_auth_command(interaction: Interaction, file: discord.Attachment):
         try:
             auth_json = jsonc.loads_jsonc(text)
         except Exception as e:
-            await interaction.followup.send(f"❌ JSONC/JSON の読み込みに失敗しました: {e}", ephemeral=True)
+            await interaction.followup.send(f"❌ JSONC/JSON の読み込みに失敗しました: {redact(str(e))}", ephemeral=True)
             return
 
         # ---------------- 構造検証（最低限） ----------------
@@ -113,29 +114,29 @@ async def ac_auth_command(interaction: Interaction, file: discord.Attachment):
             if chat_provider == "openai":
                 result = await is_valid_openai_key(chat_key)
                 if result is not True:
-                    await interaction.followup.send(f"❌ Chat用のAPIキーは利用できません。\n{result}", ephemeral=True)
+                    await interaction.followup.send(f"❌ Chat用のAPIキーは利用できません。\n{redact(str(result))}", ephemeral=True)
                     return
                 result = await is_openai_chat_model_available(chat_key, chat_model)
                 if result is not True:
-                    await interaction.followup.send(f"❌ Chatモデル `{chat_model}` は利用できません。\n{result}", ephemeral=True)
+                    await interaction.followup.send(f"❌ Chatモデル `{chat_model}` は利用できません。\n{redact(str(result))}", ephemeral=True)
                     return
             elif chat_provider == "gemini":
                 result = await is_valid_gemini_key(chat_key)
                 if result is not True:
-                    await interaction.followup.send(f"❌ Chat用のAPIキーは利用できません。\n{result}", ephemeral=True)
+                    await interaction.followup.send(f"❌ Chat用のAPIキーは利用できません。\n{redact(str(result))}", ephemeral=True)
                     return
                 result = await is_gemini_chat_model_available(chat_key, chat_model)
                 if result is not True:
-                    await interaction.followup.send(f"❌ Chatモデル `{chat_model}` は利用できません。\n{result}", ephemeral=True)
+                    await interaction.followup.send(f"❌ Chatモデル `{chat_model}` は利用できません。\n{redact(str(result))}", ephemeral=True)
                     return
             elif chat_provider == "claude":
                 result = await is_valid_claude_key(chat_key)
                 if result is not True:
-                    await interaction.followup.send(f"❌ Chat用のAPIキーは利用できません。\n{result}", ephemeral=True)
+                    await interaction.followup.send(f"❌ Chat用のAPIキーは利用できません。\n{redact(str(result))}", ephemeral=True)
                     return
                 result = await is_claude_chat_model_available(chat_key, chat_model)
                 if result is not True:
-                    await interaction.followup.send(f"❌ Chatモデル `{chat_model}` は利用できません。\n{result}", ephemeral=True)
+                    await interaction.followup.send(f"❌ Chatモデル `{chat_model}` は利用できません。\n{redact(str(result))}", ephemeral=True)
                     return
             else:
                 raise ValueError(f"❌ provider(chat) unsupported: {chat_provider}")
@@ -146,29 +147,29 @@ async def ac_auth_command(interaction: Interaction, file: discord.Attachment):
             if vision_provider == "openai":
                 result = await is_valid_openai_key(vision_key)
                 if result is not True:
-                    await interaction.followup.send(f"❌ Vision用のAPIキーは利用できません。\n{result}", ephemeral=True)
+                    await interaction.followup.send(f"❌ Vision用のAPIキーは利用できません。\n{redact(str(result))}", ephemeral=True)
                     return
                 result = await is_openai_vision_model_available(vision_key, vision_model)
                 if result is not True:
-                    await interaction.followup.send(f"❌ Visionモデル `{vision_model}` は利用できません。\n{result}", ephemeral=True)
+                    await interaction.followup.send(f"❌ Visionモデル `{vision_model}` は利用できません。\n{redact(str(result))}", ephemeral=True)
                     return
             elif vision_provider == "gemini":
                 result = await is_valid_gemini_key(vision_key)
                 if result is not True:
-                    await interaction.followup.send(f"❌ Vision用のAPIキーは利用できません。\n{result}", ephemeral=True)
+                    await interaction.followup.send(f"❌ Vision用のAPIキーは利用できません。\n{redact(str(result))}", ephemeral=True)
                     return
                 result = await is_gemini_vision_model_available(vision_key, vision_model)
                 if result is not True:
-                    await interaction.followup.send(f"❌ Visionモデル `{vision_model}` は利用できません。\n{result}", ephemeral=True)
+                    await interaction.followup.send(f"❌ Visionモデル `{vision_model}` は利用できません。\n{redact(str(result))}", ephemeral=True)
                     return
             elif vision_provider == "claude":
                 result = await is_valid_claude_key(vision_key)
                 if result is not True:
-                    await interaction.followup.send(f"❌ Vision用のAPIキーは利用できません。\n{result}", ephemeral=True)
+                    await interaction.followup.send(f"❌ Vision用のAPIキーは利用できません。\n{redact(str(result))}", ephemeral=True)
                     return
                 result = await is_claude_vision_model_available(vision_key, vision_model)
                 if result is not True:
-                    await interaction.followup.send(f"❌ Visionモデル `{vision_model}` は利用できません。\n{result}", ephemeral=True)
+                    await interaction.followup.send(f"❌ Visionモデル `{vision_model}` は利用できません。\n{redact(str(result))}", ephemeral=True)
                     return
             else:
                 raise ValueError(f"❌ provider(vision) unsupported: {vision_provider}")
@@ -181,26 +182,26 @@ async def ac_auth_command(interaction: Interaction, file: discord.Attachment):
             if image_provider == "openai":
                 result = await is_valid_openai_key(image_key)
                 if result is not True:
-                    await interaction.followup.send(f"❌ ImageGen用のAPIキーは利用できません。\n{result}", ephemeral=True)
+                    await interaction.followup.send(f"❌ ImageGen用のAPIキーは利用できません。\n{redact(str(result))}", ephemeral=True)
                     return
                 result = await is_openai_imagegen_model_available(image_key, image_model, image_size, image_quality)
                 if result is not True:
-                    await interaction.followup.send(f"❌ ImageGenモデル `{image_model}` は利用できません。\n{result}", ephemeral=True)
+                    await interaction.followup.send(f"❌ ImageGenモデル `{image_model}` は利用できません。\n{redact(str(result))}", ephemeral=True)
                     return
             elif image_provider == "gemini":
                 result = await is_valid_gemini_key(image_key)
                 if result is not True:
-                    await interaction.followup.send(f"❌ ImageGen用のAPIキーは利用できません。\n{result}", ephemeral=True)
+                    await interaction.followup.send(f"❌ ImageGen用のAPIキーは利用できません。\n{redact(str(result))}", ephemeral=True)
                     return
                 result = await is_gemini_imagegen_model_available(image_key, image_model)
                 if result is not True:
-                    await interaction.followup.send(f"❌ ImageGenモデル `{image_model}` は利用できません。\n{result}", ephemeral=True)
+                    await interaction.followup.send(f"❌ ImageGenモデル `{image_model}` は利用できません。\n{redact(str(result))}", ephemeral=True)
                     return
             else:
                 raise ValueError(f"❌ provider(imagegen) unsupported: {image_provider}")
 
         except ValueError as e:
-            await interaction.followup.send(f"❌ 対応していないプロバイダが指定されました。\n{e}", ephemeral=True)
+            await interaction.followup.send(f"❌ 対応していないプロバイダが指定されました。\n{redact(str(e))}", ephemeral=True)
             return
 
         # ---------------- セッション保存（ユーザーごと） ----------------
@@ -225,7 +226,7 @@ async def ac_auth_command(interaction: Interaction, file: discord.Attachment):
 
     except Exception as e:
         try:
-            await interaction.followup.send(f"❌ エラーが発生しました: {e}", ephemeral=True)
+            await interaction.followup.send(f"❌ エラーが発生しました: {redact(str(e))}", ephemeral=True)
         except Exception:
             pass
 

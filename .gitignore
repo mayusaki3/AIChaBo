@@ -2,5 +2,6 @@ __pycache__/
 .env
 .env_prod
 .env_dev
+venv
 common/session/dump/
 ui/discord/data/threads/

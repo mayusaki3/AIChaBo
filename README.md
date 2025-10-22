@@ -25,8 +25,7 @@ AIChaBo（あいちゃぼ）は、ユーザーが発行した API キーを使�
     3. 対象のサーバー名を右クリック → 「IDをコピー」
     4. `.env` の DISCORD_GUILD_ID= に貼り付け
 
-## インストール方法
-### Ubuntuの場合
+## インストール方法（Ubuntuの場合）
 ```shell
 sudo apt update && sudo apt upgrade -y
 
@@ -68,7 +67,40 @@ cp .env.example .env
 nano .env
 ```
 
-## 使用方法
+## インストール方法（Windowsの場合）
+### 0) 事前準備
+1. Python 3.10 系を公式からインストール（Add to PATH にチェック）。
+2. Git for Windows をインストール。
+3. VS Code（推奨）＋拡張機能「Python」「Pylance」。
+
+### 1) リポジトリ取得
+```shell
+# 任意のディレクトリで
+git clone https://github.com/mayusaki3/AIChaBo.git
+cd AIChaBo
+git checkout develop
+```
+### 2) 仮想環境（venv）
+```shell
+# 仮想環境の作成と有効化
+python -m venv venv
+.\venv\Scripts\activate
+```
+
+### 3) requirements.txt に応じて依存ライブラリをインストール
+```shell
+pip install -r requirements.txt
+```
+
+```shell
+cp .env.example .env
+# 環境変数の設定
+notepad .env
+# 起動
+python ui/discord/Discord_AIChaBo.py
+```
+
+## 使用方法（Ubuntuの場合）
 ### サービスの設定内容
 /etc/systemd/system/AIChaBo.service
 ```ini

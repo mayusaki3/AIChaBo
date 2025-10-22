@@ -2,6 +2,7 @@ import os
 import io
 import re
 import discord
+import asyncio
 from discord import app_commands, Thread
 from dotenv import load_dotenv
 from typing import List, Optional, Callable, Tuple, Awaitable
@@ -15,7 +16,7 @@ from common.session.capabilities_loader import load_image_caps, normalize_image_
 from common.utils import thread_utils
 from common.utils.thread_utils import remove_thread_from_server, is_thread_managed
 from common.utils.websearch_utils import search_web, format_results_as_markdown
-from common.utils.webread_utils import read_urls, format_read_results_for_llm
+from common.utils.webread_utils import read_urls, format_read_results_for_llm, redact
 from common.utils.attachments import split_attachments, render_append_block
 from common.utils.prefetch import prefetch_doc_summaries
 from common.utils.intent import (
@@ -60,6 +61,8 @@ exp_lines = []
 SERVICE_NAME = "discord"
 ANSI_RE = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
 DISCORD_MSG_LIMIT = 2000
+BACKGROUND_TASKS: "set[asyncio.Task]" = set()
+_SHUTDOWN_DONE = False
 
 # ====== ユーティリティ ======
 
@@ -145,10 +148,12 @@ def _fmt(t: str, **kw) -> str:
         return t or ""
 
 def _print(msg: str, printmsg: bool, expmsg: bool):
+    # すべてのデバッグ出力をレダクトしてから表示・記録
+    safe = redact(msg)
     if printmsg:
-        print(msg)
+        print(safe)
     if expmsg:
-        exp_lines.append(ANSI_RE.sub('', msg))
+        exp_lines.append(ANSI_RE.sub('', safe))
 
 async def _fetch_reply_source(message: discord.Message) -> Optional[discord.Message]:
     if message.reference and message.reference.message_id:
@@ -305,7 +310,7 @@ async def on_message(message: discord.Message):
                 if not message.author.bot:
                     await context_manager.backfill_reply_chain(thread, message, max_hops=10)
             except Exception as e:
-                print(f"[reply-chain] backfill failed: {e}")
+                print(f"[reply-chain] backfill failed: {redact(str(e))}")
         user_text = f"{author_name}: {message.content}" + render_append_block(imgs, docs)
         context_manager.append_context(thread.id, user_text, str(message.id), refid, None)
 
@@ -331,7 +336,7 @@ async def on_message(message: discord.Message):
     try:
         load_for_ctx(user_id=user_id, guild_id=guild_id, force=False)
     except Exception as e:
-        print(f"[prompt_loader] load_for_ctx failed: {e}")
+        print(f"[prompt_loader] load_for_ctx failed: {redact(str(e))}")
 
     # ===== コンテキスト組み立て =====
     context_list = []
@@ -363,9 +368,9 @@ async def on_message(message: discord.Message):
                 "channel_is_nsfw": "true" if (parent_nsfw or thread_nsfw) else "false",
             }
         )
-        context_list.append("\s" + system_prompt_text)
+        context_list.append("\\s" + system_prompt_text)
     except Exception as e:
-        print(f"[prompt_loader] get_prompt_for_ctx failed: {e}")
+        print(f"[prompt_loader] get_prompt_for_ctx failed: {redact(str(e))}")
 
     # 履歴を積む（今回の発話を重複させない）
     hist = list(context_manager.get_context(thread.id))
@@ -383,7 +388,7 @@ async def on_message(message: discord.Message):
     if reply_src:
         reply_to_snippet = read_snippet_for_ctx("reply_to", user_id, guild_id)
         if reply_to_snippet:
-            context_list.append("\s" + reply_to_snippet)
+            context_list.append("\\s" + reply_to_snippet)
         context_list.append(_format_reply_context(reply_src))
 
     # 最後に今回のユーザー発話（＝応答対象）
@@ -432,8 +437,7 @@ async def on_message(message: discord.Message):
                             f"https://api.github.com/repos/{owner_repo}",
                             f"https://api.github.com/repos/{owner_repo}/branches?per_page=100",
                         ]
-                        token = os.getenv("GITHUB_TOKEN")
-                        headers = {"Authorization": f"Bearer {token}"} if token else None
+                        headers = None
                         items_meta = await read_urls(
                             meta_urls,
                             max_bytes = 1_500_000,
@@ -545,10 +549,7 @@ async def on_message(message: discord.Message):
                             raw_urls = [f"https://raw.githubusercontent.com/{owner_repo}/{ref}/{p}" for p,_ in candidates] if (owner_repo and ref) else []
 
                             if raw_urls:
-                                # 認証ヘッダ（あれば）
-                                token = os.getenv("GITHUB_TOKEN")
-                                headers2 = {"Authorization": f"Bearer {token}"} if token else None
-
+                                headers2 = None
                                 items_raw = await read_urls(
                                     raw_urls,
                                     max_bytes=1_500_000, max_chars=20_000,
@@ -573,7 +574,7 @@ async def on_message(message: discord.Message):
                                 formatted = format_read_results_for_llm(items_all, require_citations=True)
                         except Exception as e:
                             if server_session_manager.get_option(guild_id, "printmsg", False):
-                                print(f"[prefetch][github raw follow-up skipped] {e}")
+                                print(f"[prefetch][github raw follow-up skipped] {redact(str(e))}")
                         # raw まで行けた場合は重複追記を避ける
                         if prefetch_used_fallback:
                             items_all = items_meta + items_tree
@@ -587,7 +588,7 @@ async def on_message(message: discord.Message):
                             context_list.append("\\s GitHub API 取得:\n" + formatted)
     except Exception as e:
         if server_session_manager.get_option(guild_id, "printmsg", False):
-            print(f"[prefetch][github] skipped: {e}")
+            print(f"[prefetch][github] skipped: {redact(str(e))}")
 
     # オプション
     printmsg = server_session_manager.get_option(guild_id, "printmsg", False)
@@ -604,8 +605,8 @@ async def on_message(message: discord.Message):
         if printmsg or expmsg:
             _print("context_list =>", printmsg, expmsg)
             for msg in context_list:
-                if msg.startswith("\s"):
-                    out = msg.replace("\s", "system: ", 1)
+                if msg.startswith("\\s"):
+                    out = msg.replace("\\s", "system: ", 1)
                     _print(f"  \033[32m{out}\033[0m", printmsg, expmsg)
                 else:
                     _print(f"  \033[33m{msg}\033[0m", printmsg, expmsg)
@@ -752,7 +753,7 @@ async def on_message(message: discord.Message):
                             result = f"\\s[{q_preview}] の検索結果→{formatted_results}"
                 except Exception as e:
                     q_preview = ", ".join(action.queries[:2]) + (f" 他{len(action.queries)-2}件" if len(action.queries) > 2 else "")
-                    result = f"[{q_preview}] の検索中にエラーが発生しました: {e}"
+                    result = f"[{q_preview}] の検索中にエラーが発生しました: {redact(str(e))}"
 
                 # 検索結果を会話に追記して、必要ならもう一度 LLM へ
                 context_list.append(result)
@@ -775,10 +776,8 @@ async def on_message(message: discord.Message):
                     async with message.channel.typing():
                         # （将来）Actionから渡されたHTTPヘッダを read_urls に橋渡し
                         extra_headers = getattr(action, "headers", None) if hasattr(action, "headers") else None
-                        if not extra_headers and detect_intent(user_text, locale="ja") == "github":
-                            token = os.getenv("GITHUB_TOKEN")  # もしくは auth_data["github"]["token"]
-                            if token:
-                                extra_headers = {"Authorization": f"Bearer {token}"}
+                        if detect_intent(user_text, locale="ja") == "github":
+                            extra_headers = None
 
                         # --- LLM生成URLのサニタイズ: GitHub Tree API で /repos 抜けを補正 ---
                         def _fix_github_urls(urls):
@@ -871,11 +870,7 @@ async def on_message(message: discord.Message):
                                     # 3) raw を追加読取
                                     if raw_urls:
                                         # 認証ヘッダ（必要なら自動補完）
-                                        extra_headers2 = getattr(action, "headers", None) if hasattr(action, "headers") else None
-                                        if not extra_headers2:
-                                            token = os.getenv("GITHUB_TOKEN")
-                                            if token:
-                                                extra_headers2 = {"Authorization": f"Bearer {token}"}
+                                        extra_headers2 = None
                                         items_raw = await read_urls(
                                             raw_urls,
                                             max_bytes = getattr(action, "max_bytes", 1_500_000) or 1_500_000,
@@ -913,7 +908,7 @@ async def on_message(message: discord.Message):
                         if extra_lines:
                             result += "\n\n[抽出サマリ]\n" + "\n".join(extra_lines)
                 except Exception as e:
-                    result = f"web.read の実行中にエラーが発生しました: {e}"
+                    result = f"web.read の実行中にエラーが発生しました: {redact(str(e))}"
                 context_list.append(result)
                 # 続行
                 tool_runs += 1
@@ -982,7 +977,7 @@ async def on_message(message: discord.Message):
                         if printmsg or expmsg:
                             _print(f"webimage result => {vision_text[:2000]}", printmsg, expmsg)
                 except Exception as e:
-                    result = f"web.image の実行中にエラーが発生しました: {e}"
+                    result = f"web.image の実行中にエラーが発生しました: {redact(str(e))}"
                 context_list.append(result)
                 # 続行
                 tool_runs += 1
@@ -1070,10 +1065,10 @@ async def on_message(message: discord.Message):
             file_chunks = list(_chunks(pending_files, 10))
             # 1通目
             first_text = (text_chunks[0] if text_chunks else None) or None
-            await message.channel.send(content=first_text, files=file_chunks[0])
+            await message.channel.send(content=redact(first_text or ""), files=file_chunks[0])
             # 残りの本文
             for t in (text_chunks[1:] if text_chunks else []):
-                await message.channel.send(t)
+                await message.channel.send(redact(t))
             # 残りの添付
             for fc in file_chunks[1:]:
                 await message.channel.send(files=fc)
@@ -1083,7 +1078,7 @@ async def on_message(message: discord.Message):
             if text_chunks:
                 for t in text_chunks:
                     if t:
-                        await message.channel.send(t)
+                        await message.channel.send(redact(t))
             else:
                 # 何も返すものが無ければ何もしない
                 pass
@@ -1130,13 +1125,13 @@ async def on_thread_delete(thread: discord.Thread):
 async def on_message_edit(before, after):
     if before.author.bot:
         return
-    print(f"🔄 メッセージが編集されました: {before.author.name} {before.content} ⇒ {after.author.name} {after.content}")
+    print(f"🔄 メッセージが編集されました: {before.author.name} {redact(before.content or '')} ⇒ {after.author.name} {redact(after.content or '')}")
     context_manager.reset_context(before.channel.id)
 
 # メッセージ削除イベント
 @client.event
 async def on_message_delete(message):
-    print(f"❌ メッセージが削除されました: {message.content}")
+    print(f"❌ メッセージが削除されました: {redact(message.content or '')}")
     context_manager.reset_context(message.channel.id)
 
 # ====== 起動/同期 ======
@@ -1194,9 +1189,40 @@ async def on_ready():
         print("✅ 起動完了 (Ctrl-Cで終了します)")
 
     except Exception as e:
-        print(f"❌ コマンド同期に失敗しました: {e}")
+        print(f"❌ コマンド同期に失敗しました: {redact(str(e))}")
         await client.close()
 
-# ===== Bot 起動 =====
-def start_discord_bot():
-    client.run(os.environ["DISCORD_BOT_TOKEN"])
+# ===== Bot シャットダウン =====
+async def on_graceful_shutdown(reason: str = "unknown"):
+    global _SHUTDOWN_DONE
+    # 二重実行を防止（signal→atexitなど）
+    if _SHUTDOWN_DONE or getattr(client, "is_closed", lambda: False)():
+        _print(f"ℹ️ シャットダウンが要求されました： {reason} - 処理済みのためスキップしました", True, False)
+        return
+    
+    # 1) 新規イベントの取り込み停止
+    try:
+        await client.change_presence(status=discord.Status.invisible)
+    except Exception:
+        pass
+    # 2) 背景タスクの取消
+    for t in list(BACKGROUND_TASKS):
+        try:
+            t.cancel()
+        except Exception:
+            pass
+    await asyncio.gather(*BACKGROUND_TASKS, return_exceptions=True)
+    BACKGROUND_TASKS.clear()
+    # 3) 送信待ちなどのフラッシュがある場合はここで await
+    #    （例：ログバッファ flush、一時ファイル削除、状態保存 等）
+    try:
+        _print(f"ℹ️ シャットダウンが要求されました： {reason}", True, False)
+    except Exception:
+        pass
+    # 4) Discord クライアントを閉じる
+    try:
+        await client.close()
+    except Exception:
+        pass
+    _print("ℹ️ Discordクライアントを閉じました", True, False)
+    _SHUTDOWN_DONE = True
