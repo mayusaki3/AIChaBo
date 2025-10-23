@@ -26,6 +26,7 @@ class PluginResult:
     items: List[Dict[str, Any]]
     citations: List[str]
     display_text: Optional[str] = None
+    meta: Optional[Dict[str, Any]] = None  # 例: {"plugin_name": "github", "system_prompt": "..."}
 
 class ProviderPlugin(Protocol):
     name: str
