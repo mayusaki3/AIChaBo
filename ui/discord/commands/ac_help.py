@@ -1,40 +1,29 @@
-import os
 import discord
 from discord import app_commands
+from ui.discord.services.commands import list_registered_commands
 
 HELP_TEXT = {
     "usage": "/ac_help",
     "description": "すべての /ac_ コマンドのヘルプを表示します。"
 }
 
-COMMANDS_DIR = os.path.dirname(__file__)
-
-@app_commands.command(name="ac_help", description=HELP_TEXT["description"])
+def get_command():
+    return app_commands.Command(
+        name="ac_help",
+        description=HELP_TEXT["description"],
+        callback=ac_help_command,
+    )
 async def ac_help_command(interaction: discord.Interaction):
-    help_messages = []
-
-    for filename in os.listdir(COMMANDS_DIR):
-        if filename.startswith("ac_") and filename.endswith(".py"):
-            module_name = filename[:-3]
-            try:
-                module = importlib.import_module(f"ui.discord.commands.{module_name}")
-                help_text = getattr(module, "HELP_TEXT", None)
-                if isinstance(help_text, dict):
-                    usage = help_text.get("usage", f"/{module_name}")
-                    desc = help_text.get("description", "(未定義)")
-                    help_messages.append(f"**{usage}**\n説明: {desc}")
-            except Exception as e:
-                help_messages.append(f"**/{module_name}**\nエラー: {e}")
+    """ローダが保持する登録レジストリからヘルプを組み立てる。"""
+    rows = []
+    for meta in list_registered_commands():
+        usage = meta.get("usage") or f"/{meta.get('name','')}"
+        desc  = meta.get("description") or "(未定義)"
+        rows.append(f"**{usage}**\n説明: {desc}")
 
     embed = discord.Embed(
         title="あいちゃぼ コマンドヘルプ",
-        description="\n\n".join(help_messages),
+        description="\n\n".join(rows) if rows else "（登録済みの /ac_ コマンドがありません）",
         color=0x00ffcc
     )
     await interaction.response.send_message(embed=embed, ephemeral=True)
-
-def register(tree: app_commands.CommandTree, client: discord.Client, guild: discord.Object = None):
-    if guild:
-        tree.add_command(ac_help_command, guild=guild)
-    else:
-        tree.add_command(ac_help_command)

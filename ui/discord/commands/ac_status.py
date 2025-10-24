@@ -53,7 +53,12 @@ def _parse_option_tokens(option: str | None) -> list[tuple[str, str, bool | None
 async def _maybe_await(result):
     return await result if inspect.isawaitable(result) else result
 
-@app_commands.command(name="ac_status", description=HELP_TEXT["description"])
+def get_command():
+    return app_commands.Command(
+        name="ac_status",
+        description=HELP_TEXT["description"],
+        callback=ac_status_command,
+    )
 @app_commands.describe(option="オプション: ")
 async def ac_status_command(interaction: Interaction, option: str = None):
     await interaction.response.defer(thinking=True, ephemeral=True)
@@ -272,9 +277,3 @@ async def ac_status_command(interaction: Interaction, option: str = None):
         msg_lines.extend(export_msgs)
 
     await interaction.followup.send("\n".join(msg_lines), ephemeral=True)
-
-def register(tree: app_commands.CommandTree, client: discord.Client, guild: discord.Object = None):
-    if guild:
-        tree.add_command(ac_status_command, guild=guild)
-    else:
-        tree.add_command(ac_status_command)

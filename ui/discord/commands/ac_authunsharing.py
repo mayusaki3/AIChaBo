@@ -9,6 +9,9 @@ HELP_TEXT = {
     "description": "認証情報の共有を解除します。"
 }
 
+def get_command():
+    return None
+
 @app_commands.command(name="ac_authunsharing", description=HELP_TEXT["description"])
 async def ac_authunsharing_command(interaction: Interaction):
     await interaction.response.defer(thinking=True, ephemeral=True)
@@ -20,9 +23,3 @@ async def ac_authunsharing_command(interaction: Interaction):
         return
     server_session_manager.clear_session(guild_id)
     await interaction.followup.send("✅ 認証情報の共有を解除しました", ephemeral=True)
-
-def register(tree: app_commands.CommandTree, client: discord.Client, guild: discord.Object = None):
-    if guild:
-        tree.add_command(ac_authunsharing_command, guild=guild)
-    else:
-        tree.add_command(ac_authunsharing_command)

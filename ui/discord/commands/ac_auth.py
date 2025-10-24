@@ -52,7 +52,12 @@ def _require_fields(section: dict, fields: list[str], prefix: str) -> list[str]:
 # --------------------------
 # /ac_auth 本体
 # --------------------------
-@app_commands.command(name="ac_auth", description=HELP_TEXT["description"])
+def get_command():
+    return app_commands.Command(
+        name="ac_auth",
+        description=HELP_TEXT["description"],
+        callback=ac_auth_command,
+    )
 async def ac_auth_command(interaction: Interaction, file: discord.Attachment):
     if not interaction.response.is_done():
         try:
@@ -229,9 +234,3 @@ async def ac_auth_command(interaction: Interaction, file: discord.Attachment):
             await interaction.followup.send(f"❌ エラーが発生しました: {redact(str(e))}", ephemeral=True)
         except Exception:
             pass
-
-def register(tree: app_commands.CommandTree, client: discord.Client, guild: discord.Object = None):
-    if guild:
-        tree.add_command(ac_auth_command, guild=guild)
-    else:
-        tree.add_command(ac_auth_command)

@@ -1,59 +1,57 @@
-import sys
-import os
-
-# プロジェクトルートをモジュール探索パスに追加
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
-
+# 起動スクリプト（asyncio.run + signal/atexit で安全に終了）
+import os, asyncio, signal, atexit, logging
 from dotenv import load_dotenv
-import logging, os, asyncio, signal, atexit, sys
-from ui.discord.discord_handler import client, on_graceful_shutdown
+from ui.discord.runtime.client import client, tree
+from ui.discord.runtime.shutdown import on_graceful_shutdown
+# イベントをimportすると @client.event が実行される
+from ui.discord.events import lifecycle, message  # noqa
+from ui.discord.services.commands import register_all
 
 async def _main():
     load_dotenv()
-    for noisy in ("httpx", "openai", "anthropic", "google", "aiohttp"):
+    # SDK系のverboseログを抑制（秘匿情報が混入しないよう最低限の防御）
+    for noisy in ("httpx","openai","anthropic","google","aiohttp"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
+
+    register_all(tree)
+
     token = os.getenv("DISCORD_BOT_TOKEN", "")
     if not token:
         print("❌ DISCORD_BOT_TOKEN が未設定です（.env か環境変数を確認してください）")
         return
 
-    # Ctrl+C / タスク終了要求 → シャットダウンへ
+    # 終了シグナル（Ctrl+C等）待ちの仕組み
     shutdown_event = asyncio.Event()
-    def _signal_handler(*_):
-        shutdown_event.set()
-    # Windows: SIGINT(Ctrl+C) / SIGBREAK(Ctrl+Break) は捕捉可能
-    signal.signal(signal.SIGINT, _signal_handler)
-    if hasattr(signal, "SIGBREAK"):
-        signal.signal(signal.SIGBREAK, _signal_handler)
-    # 一部環境で使える場合のみ
-    if hasattr(signal, "SIGTERM"):
-        try:
-            signal.signal(signal.SIGTERM, _signal_handler)
-        except Exception:
-            pass
+    def _sig(*_): shutdown_event.set()
+    signal.signal(signal.SIGINT, _sig)
+    if hasattr(signal,"SIGBREAK"): signal.signal(signal.SIGBREAK, _sig)
+    if hasattr(signal,"SIGTERM"):
+        try: signal.signal(signal.SIGTERM, _sig)
+        except Exception: pass
 
-    # プロセス終了時の保険
-    atexit.register(lambda: asyncio.run(on_graceful_shutdown(reason="atexit")))
+    # atexitの保険（signalで閉じた後は二重実行をスキップする実装）
+    atexit.register(lambda: asyncio.run(on_graceful_shutdown("atexit")))
 
-    # Bot起動
+    # 起動
     bot_task = asyncio.create_task(client.start(token))
-    # 終了シグナル待ち
-    await shutdown_event.wait()
-    # シャットダウン処理
-    await on_graceful_shutdown(reason="signal")
-    # client.start の終了を待つ
+    # Bot終了 or Ctrl+C の“どちらか早い方”で先に進む
+    done, pending = await asyncio.wait(
+        {bot_task, asyncio.create_task(shutdown_event.wait())},
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+    # Ctrl+C 以外（＝on_ready側でclient.close済み）のケースでは、ここで静かに終了
+    if bot_task in done:
+        try:
+            await bot_task  # エラーあればここで受ける（今回は静かに落とす）
+        except asyncio.CancelledError:
+            pass
+        return
+    # Ctrl+C の場合は優雅に終了
+    await on_graceful_shutdown("signal")
     try:
         await bot_task
     except asyncio.CancelledError:
         pass
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(_main())
-    except KeyboardInterrupt:
-        # 念のため
-        try:
-            asyncio.run(on_graceful_shutdown(reason="KeyboardInterrupt"))
-        except Exception:
-            pass
-        sys.exit(0)
+    asyncio.run(_main())

@@ -10,7 +10,12 @@ HELP_TEXT = {
     "description": "認証情報が未登録の人に現在の認証情報をサーバー単位で共有します。"
 }
 
-@app_commands.command(name="ac_authsharing", description=HELP_TEXT["description"])
+def get_command():
+    return app_commands.Command(
+        name="ac_auth",
+        description=HELP_TEXT["description"],
+        callback=ac_authsharing_command,
+    )
 async def ac_authsharing_command(interaction: Interaction):
     await interaction.response.defer(thinking=True, ephemeral=True)
 
@@ -36,9 +41,3 @@ async def ac_authsharing_command(interaction: Interaction):
     auth += f"👀{auth_data['vision']['provider']}/{auth_data['vision']['model']}, "
     auth += f"🖼️{auth_data['imagegen']['provider']}/{auth_data['imagegen']['model']}"
     await interaction.followup.send(redact(f"{msg}✅ 現在の認証情報［ {auth} ］を共有しました"), ephemeral=True)
-
-def register(tree: app_commands.CommandTree, client: discord.Client, guild: discord.Object = None):
-    if guild:
-        tree.add_command(ac_authsharing_command, guild=guild)
-    else:
-        tree.add_command(ac_authsharing_command)

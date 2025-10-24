@@ -115,3 +115,5 @@ class GitHubPlugin:
         result.items.append({"type": "github_raw_files", "files": raw_files})
         result.citations.extend([r.url for r in responses if r and r.url])
         return result
+
+PROVIDERS = [GitHubPlugin]

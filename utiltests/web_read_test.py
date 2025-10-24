@@ -1,7 +1,7 @@
 # utiltests/web_read_test.py（最小）
 import asyncio
-from common.plugins.dispatcher import try_handle_by_plugin
-from common.plugins.base import ReadRequest, ReadResponse, list_providers
+from common.plugins.dispatcher import try_handle_by_plugin, list_providers
+from common.plugins.base import ReadRequest, ReadResponse
 
 async def _fake_read(reqs):
     # ここは実装側の read_urls に合わせて必要なら実コード呼び出しに差替
