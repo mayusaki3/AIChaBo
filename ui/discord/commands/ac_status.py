@@ -1,3 +1,11 @@
+# ui/discord/commands/ac_status.py
+# ------------------------------------------------------------
+# /ac_status: 使用中のあいちゃぼの状態を表示
+# - オプションパラメータで、サーバー単位でシステム変数を設定可
+# - システム変数は、サーバーセッションマネージャーで管理
+# - システム変数は、各処理でトレースログONなど、デバッグ用に使用
+# - システム変数名に規定はなく、指定した名前で自由に設定可能
+# ------------------------------------------------------------
 import inspect
 import discord
 from pathlib import Path
@@ -80,17 +88,24 @@ async def ac_status_command(interaction: Interaction, option: str = None):
     # 共有されたユーザー認証情報の状態
     guild = interaction.guild
     guild_id = interaction.guild.id
-    server_auth = server_session_manager.get_session(guild_id)
-    if server_auth:
-        sharing_user_id = server_auth.get("user_id")
-        member = guild.get_member(sharing_user_id) or await guild.fetch_member(sharing_user_id)
-        user_name = (member.display_name if member else f"id: {sharing_user_id}")
-        auth = (
-            f"🗨️{server_auth['chat']['provider']}/{server_auth['chat']['model']}, "
-            f"👀{server_auth['vision']['provider']}/{server_auth['vision']['model']}, "
-            f"🖼️{server_auth['imagegen']['provider']}/{server_auth['imagegen']['model']}"
-        )
-        msg_lines.append(f"ℹ️ {user_name} さんの認証情報［ {auth} ］が共有されています。")
+    shared = server_session_manager.get_shared_auth_config(guild_id)
+    if shared:
+        sharing_user_id = shared.get("shared_by_user_id")
+        user_name = f"id: {sharing_user_id}" if sharing_user_id else "（共有者不明）"
+        try:
+            member = guild.get_member(sharing_user_id) or await guild.fetch_member(sharing_user_id) if sharing_user_id else None
+            if member: user_name = member.display_name
+        except Exception:
+            pass
+        try:
+            auth = (
+                f"🗨️{shared['chat']['provider']}/{shared['chat']['model']}, "
+                f"👀{shared['vision']['provider']}/{shared['vision']['model']}, "
+                f"🖼️{shared['imagegen']['provider']}/{shared['imagegen']['model']}"
+            )
+            msg_lines.append(f"ℹ️ {user_name} さんの認証情報［ {auth} ］が共有されています。")
+        except Exception:
+            msg_lines.append(f"ℹ️ {user_name} さんの認証情報が共有されています。")
 
     # ユーザー認証情報の確認
     user_id = interaction.user.id

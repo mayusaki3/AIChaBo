@@ -97,7 +97,7 @@ cp .env.example .env
 # 環境変数の設定
 notepad .env
 # 起動
-python ui/discord/Discord_AIChaBo.py
+python -m ui.discord.Discord_AIChaBo
 ```
 
 ## 使用方法（Ubuntuの場合）
@@ -112,7 +112,7 @@ After=network.target
 Type=simple
 User=ubuntu
 WorkingDirectory=/opt/AIChaBo/src
-ExecStart=/opt/AIChaBo/venv/bin/python ui/discord/Discord_AIChaBo.py
+ExecStart=/opt/AIChaBo/venv/bin/python -m ui.discord.Discord_AIChaBo
 Restart=always
 
 [Install]
@@ -163,7 +163,7 @@ AIChaBo は以下の /コマンドを提供しています：
 |--------------------------------|------------------------------------------------------------------------|
 | `/ac_help`                     | すべての /ac コマンドのヘルプを表示します。                            |
 | `/ac_template`                 | 認証情報設定用テンプレート（JSON）をダウンロードします。               |
-| `/ac_auth [file]`              | 使用するAIチャットの認証情報を登録します。 *1                          |
+| `/ac_auth [file]`              | 使用するAIチャット/画像認識/画像生成の認証情報を登録します。 *1                          |
 | `/ac_removeauth`               | 登録したあいちゃぼの認証情報を削除します。 *1                          |
 | `/ac_authsharing`              | 認証情報が未登録の人に現在の認証情報をサーバー単位で共有します。 *1    |
 | `/ac_authunsharing`            | サーバー単位で共有されている認証情報の共有を解除します。 *1            |
@@ -171,7 +171,7 @@ AIChaBo は以下の /コマンドを提供しています：
 | `/ac_threads`                  | あいちゃぼと会話中のスレッド一覧を表示します。                         |
 | `/ac_newchat [title] [Private]`| あいちゃぼとの会話用に新しいスレッドを作成します（件名は任意）         |
 
-*1: 認証情報は「自分の認証情報」＞「共有された認証情報」の順に使用します。自分の認証情報のみ共有でき、誰の認証情報でも共有解除できます。
+*1: 認証情報は「自分の認証情報」＞「共有された認証情報」の順に使用します。自分の認証情報のみ共有でき、誰の認証情報でも共有解除できます。共有状態で自分の認証情報を削除しても、共有解除は別途行う必要があります。
 
 *2: optionは、以下が指定できます。
 >| option              | 説明                                                                |

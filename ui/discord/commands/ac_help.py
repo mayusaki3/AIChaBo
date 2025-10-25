@@ -1,3 +1,8 @@
+# ui/discord/commands/ac_help.py
+# ------------------------------------------------------------
+# /ac_help: すべての /ac_ コマンドのヘルプを表示
+# - 表示内容は、各コマンドの HELP_TEXT より自動収集
+# ------------------------------------------------------------
 import discord
 from discord import app_commands
 from ui.discord.services.commands import list_registered_commands
