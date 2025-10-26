@@ -5,3 +5,8 @@ __pycache__/
 venv
 common/session/dump/
 ui/discord/data/threads/
+
+.aichabo/
+**/.aichabo/
+master.key
+**/master.key

@@ -67,6 +67,7 @@ def get_command():
         description=HELP_TEXT["description"],
         callback=ac_status_command,
     )
+
 @app_commands.describe(option="オプション: ")
 async def ac_status_command(interaction: Interaction, option: str = None):
     await interaction.response.defer(thinking=True, ephemeral=True)
@@ -93,8 +94,10 @@ async def ac_status_command(interaction: Interaction, option: str = None):
         sharing_user_id = shared.get("shared_by_user_id")
         user_name = f"id: {sharing_user_id}" if sharing_user_id else "（共有者不明）"
         try:
-            member = guild.get_member(sharing_user_id) or await guild.fetch_member(sharing_user_id) if sharing_user_id else None
-            if member: user_name = member.display_name
+            if sharing_user_id and guild:
+                member = guild.get_member(sharing_user_id)
+                if member:
+                    user_name = member.display_name
         except Exception:
             pass
         try:
@@ -118,7 +121,7 @@ async def ac_status_command(interaction: Interaction, option: str = None):
         )
         msg_lines.append(f"🧑‍💻 現在の認証情報［ {auth} ］")
     else:
-        if not server_auth:
+        if not shared:
             msg_lines.append("⚠️ あいちゃぼと会話するには /ac_auth で認証情報を登録してください。")
 
     # オプション処理

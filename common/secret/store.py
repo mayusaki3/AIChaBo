@@ -44,20 +44,54 @@ class SecretStore:
             if not p.exists():
                 p.write_text("{}", encoding="utf-8")
 
-        # Windows かどうかで暗号化方式を切り替える
+        # ---- 方式選択: dpapi(Windows専用) / fernet(両用) ----
         self._is_windows = sys.platform.startswith("win")
+        self._backend = None          # "dpapi" or "fernet"
+        self._fernet = None           # fernet時のみ設定
 
-        # 非Windowsでは Fernet のマスターキーが必須
-        self._fernet = None
-        if not self._is_windows:
+        # 環境変数で強制: AC_SECRET_BACKEND=dpapi|fernet
+        forced = (os.getenv("AC_SECRET_BACKEND") or "").strip().lower()
+        if forced in ("dpapi", "fernet"):
+            prefer_dpapi = forced == "dpapi"
+        else:
+            # 既定: Windowsはdpapi、非Windowsはfernet
+            prefer_dpapi = self._is_windows
+
+        # dpapiが使えるか（pywin32依存）
+        dpapi_ok = False
+        if self._is_windows:
+            try:
+                import win32crypt  # type: ignore  # noqa
+                dpapi_ok = True
+            except Exception:
+                dpapi_ok = False
+
+        use_dpapi = prefer_dpapi and dpapi_ok
+        if use_dpapi:
+            self._backend = "dpapi"
+            # DPAPIは追加キー不要
+        else:
+            # Fernet（両用）: AC_MASTER_KEY を優先。無ければ ~/.aichabo/master.key を自動生成
+            self._backend = "fernet"
             key = os.getenv("AC_MASTER_KEY")
             if not key:
-                raise RuntimeError(
-                    "AC_MASTER_KEY is required on non-Windows platforms "
-                    "(Generate by: from cryptography.fernet import Fernet; print(Fernet.generate_key().decode()))"
-                )
-            from cryptography.fernet import Fernet  # 遅延importで依存を最小化
+                from cryptography.fernet import Fernet  # 遅延import
+                mk_path = (STORE_DIR.parent / "master.key")
+                if mk_path.exists():
+                    key = mk_path.read_text(encoding="utf-8").strip()
+                else:
+                    key = Fernet.generate_key().decode()
+                    mk_path.write_text(key, encoding="utf-8")
+                    try:
+                        os.chmod(mk_path, 0o600)
+                    except Exception:
+                        pass
+            from cryptography.fernet import Fernet
             self._fernet = Fernet(key.encode())
+
+    # 公開: 現在のバックエンド名を返す（UI表示用）
+    def backend_name(self) -> str:
+        return "Windows DPAPI" if self._backend == "dpapi" else "Fernet (portable)"
 
     # --------------------------
     # 内部ユーティリティ
@@ -83,7 +117,7 @@ class SecretStore:
     # --------------------------
     def _encrypt(self, raw: bytes) -> str:
         """平文bytesを暗号化し、JSONに入れやすい文字列として返す。"""
-        if self._is_windows:
+        if self._backend == "dpapi":
             # DPAPIで暗号化 → base64文字列化して保存
             import win32crypt  # type: ignore
             enc = win32crypt.CryptProtectData(raw, None, None, None, None, 0)
@@ -95,7 +129,7 @@ class SecretStore:
 
     def _decrypt(self, enc_text: str) -> bytes:
         """暗号文字列を復号し、平文bytesを返す。"""
-        if self._is_windows:
+        if self._backend == "dpapi":
             # base64 → DPAPI復号
             import win32crypt  # type: ignore
             raw = base64.b64decode(enc_text.encode("utf-8"))

@@ -7,3 +7,4 @@ openai>=1.0.0
 google-generativeai
 anthropic
 PyYAML>=6.0.1
+cryptography

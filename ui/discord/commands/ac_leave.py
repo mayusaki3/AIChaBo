@@ -1,3 +1,7 @@
+# ui/discord/commands/ac_leave.py
+# ------------------------------------------------------------
+# /ac_leave: あいちゃぼを現在のスレッドから退出
+# ------------------------------------------------------------
 import discord
 from discord import app_commands, Interaction, Thread
 from common.utils.thread_utils import remove_thread_from_server, is_thread_managed
@@ -9,7 +13,13 @@ HELP_TEXT = {
 
 SERVICE_NAME = "discord"
 
-@app_commands.command(name="ac_leave", description=HELP_TEXT["description"])
+def get_command():
+    return app_commands.Command(
+        name="ac_leave",
+        description=HELP_TEXT["description"],
+        callback=ac_leave_command,
+    )
+
 async def ac_leave_command(interaction: Interaction):
     await interaction.response.defer(thinking=True, ephemeral=True)
     if not isinstance(interaction.channel, Thread):
@@ -41,9 +51,3 @@ async def ac_leave_command(interaction: Interaction):
 
     except Exception as e:
         await interaction.followup.send(f"❌ あいちゃぼの退出に失敗しました: {e}", ephemeral=True)
-
-def register(tree: app_commands.CommandTree, client: discord.Client, guild: discord.Object = None):
-    if guild:
-        tree.add_command(ac_leave_command, guild=guild)
-    else:
-        tree.add_command(ac_leave_command)

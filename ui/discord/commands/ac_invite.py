@@ -1,3 +1,7 @@
+# ui/discord/commands/ac_invite.py
+# ------------------------------------------------------------
+# /ac_invite: あいちゃぼを現在のスレッドに招待
+# ------------------------------------------------------------
 import discord
 from discord import app_commands, Interaction, Thread
 from common.utils.thread_utils import add_thread_to_server, is_thread_managed
@@ -9,7 +13,13 @@ HELP_TEXT = {
 
 SERVICE_NAME = "discord"
 
-@app_commands.command(name="ac_invite", description=HELP_TEXT["description"])
+def get_command():
+    return app_commands.Command(
+        name="ac_invite",
+        description=HELP_TEXT["description"],
+        callback=ac_invite_command,
+    )
+
 async def ac_invite_command(interaction: Interaction):
     await interaction.response.defer(thinking=True, ephemeral=True)
     if not isinstance(interaction.channel, Thread):
@@ -59,9 +69,3 @@ async def ac_invite_command(interaction: Interaction):
 
     except Exception as e:
         await interaction.followup.send(f"❌ あいちゃぼの招待に失敗しました: {e}", ephemeral=True)
-
-def register(tree: app_commands.CommandTree, client: discord.Client, guild: discord.Object = None):
-    if guild:
-        tree.add_command(ac_invite_command, guild=guild)
-    else:
-        tree.add_command(ac_invite_command)

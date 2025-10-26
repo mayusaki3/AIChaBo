@@ -4,6 +4,7 @@ from ..runtime.client import client, tree
 from ..utils.log import _print
 from common.plugins.dispatcher import list_providers
 from common.utils.webread_utils import redact
+from common.secret.store import store
 import os, asyncio, sys
 from discord import Object as DiscordObject
 
@@ -47,6 +48,12 @@ async def on_ready():
         _print("✅ 存在しないサーバー/スレッドのチェックおよびクリーンアップを完了しました")
 
     _print("🔌 Loaded plugins: " + (", ".join(list_providers()) or "(none)"))
+
+    try:
+        _print(f"🔐 機密ストアバックエンド: {store.backend_name()}")
+    except Exception:
+        _print("🔐 機密ストアバックエンド: (unknown)")
+
     _print("✅ 起動完了 (Ctrl-Cで終了します)")
 
 @client.event

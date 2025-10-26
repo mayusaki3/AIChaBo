@@ -6,6 +6,7 @@ AIChaBo（あいちゃぼ）は、ユーザーが発行した API キーを使�
 利用者の認証情報に API キー を設定する仕組みのため、LLMの利用料は利用者が負担する形になります。  
 サーバー単位で利用者の認証情報を共有することもでき、その場合は共有元の利用者が利用料を負担することになります。  
 使用される認証情報は、利用者が設定した認証情報＞共有された認証情報 となっています。  
+API キー は暗号化して保管しています。（Fernet/DPAPIを利用）
 
 ## 環境変数の設定（Discord用）
 
@@ -60,6 +61,7 @@ requirements.txt に含まれる主なライブラリ:
 - google-generativeai
 - anthropic
 - PyYAML>=6.0.1
+- cryptography
 
 ```shell
 cp .env.example .env
@@ -90,6 +92,11 @@ python -m venv venv
 ### 3) requirements.txt に応じて依存ライブラリをインストール
 ```shell
 pip install -r requirements.txt
+# Windowsで機密ストアバックエンドにDPAPIを使用する場合
+pip install pywin32
+set AC_SECRET_BACKEND=
+# Windowsでpywin32インストール済みの状態で機密ストアバックエンドにFernetを使用する場合
+set AC_SECRET_BACKEND=fernet
 ```
 
 ```shell
@@ -154,6 +161,19 @@ sudo systemctl start AIChaBo.service
 # ステータス確認
 sudo systemctl status AIChaBo.service
 ```
+
+## 機密情報を全削除する場合
+以下の格納先フォルダごと削除してください。
+
+Fernet起動時の既定は「ユーザーのホーム配下」です。
+- Windows: C:\Users\<あなたのユーザー名>\.aichabo\master.key（＋機密データのJSON等）
+- macOS/Linux: ~/.aichabo/master.key
+
+同じ場所にフォルダ ~/.aichabo/ も作られます。  
+※ AC_MASTER_KEY を環境変数で与えている場合は master.keyファイルは作られません。DPAPI（AC_SECRET_BACKEND=dpapi）起動時も同様です。
+
+DPAPIの場合の既定は「ユーザーのホーム配下」です。
+- Windows: C:\Users\<あなたのユーザー名>\.aichabo\（＋機密データのJSON等）
 
 ## /コマンド一覧（Discord）
 
