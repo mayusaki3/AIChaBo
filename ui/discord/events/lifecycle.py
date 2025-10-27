@@ -10,9 +10,19 @@ from discord import Object as DiscordObject
 
 @client.event
 async def on_ready():
+    # プラグイン読み込み処理
+    _print("🔌 Loaded plugins: " + (", ".join(list_providers()) or "(none)"))
+
     _print(f"✅ {client.user} としてログインしました。")
+
+    # 機密ストアバックエンド確認
     try:
-        # ★ギルド同期は DISCORD_GUILD_ID のみを見る
+        _print(f"🔐 機密ストアバックエンド: {store.backend_name()}")
+    except Exception:
+        _print("🔐 機密ストアバックエンド: (unknown)")
+
+    try:
+        # ギルド同期は DISCORD_GUILD_ID のみを見る
         dev_gid_raw = os.getenv("DISCORD_GUILD_ID")
         if dev_gid_raw:
             # 1) 数値化（commands.py 側でも検証しているが二重防御）
@@ -39,20 +49,41 @@ async def on_ready():
         await client.close()
         return
 
-    # クリーンアップ処理（実処理を呼べるならここで呼ぶ）
+    # クリーンアップ処理
     _print("🔎 サーバー/スレッドの確認中...")
     try:
-        # 例）await cleanup_orphan_threads_and_guilds(...)
-        pass
+        # --- 参加していないサーバーの検出とクリーンアップ（サーバーID単位） ---
+        from common.utils import thread_utils
+        existing_server_ids = {str(guild.id) for guild in client.guilds}
+        thread_utils.clean_deleted_servers("discord", existing_server_ids)
+
+        # --- すべてのサーバーで、実在スレッド一覧を走査して存在しない記録を削除 ---
+        import discord as _discord
+        for guild in client.guilds:
+            server_id = str(guild.id)
+            thread_ids = set()
+            # 各テキストチャンネルからスレッドを収集（アクティブ＋公開/非公開アーカイブ）
+            for channel in guild.text_channels:
+                # アクティブ
+                for t in channel.threads:
+                    thread_ids.add(str(t.id))
+                # 公開アーカイブ
+                try:
+                    async for t in channel.archived_threads(limit=None):
+                        thread_ids.add(str(t.id))
+                except (_discord.Forbidden, _discord.HTTPException):
+                    pass
+                # 非公開アーカイブ（Botが参加している場合は joined=True で取得可能）
+                for joined in (True, False):
+                    try:
+                        async for t in channel.archived_threads(private=True, joined=joined, limit=None):
+                            thread_ids.add(str(t.id))
+                    except (_discord.Forbidden, _discord.HTTPException, AttributeError):
+                        pass
+            # thread_utils に記録されている管理対象のうち、実在しないものを削除
+            thread_utils.clean_deleted_threads("discord", server_id, thread_ids)
     finally:
         _print("✅ 存在しないサーバー/スレッドのチェックおよびクリーンアップを完了しました")
-
-    _print("🔌 Loaded plugins: " + (", ".join(list_providers()) or "(none)"))
-
-    try:
-        _print(f"🔐 機密ストアバックエンド: {store.backend_name()}")
-    except Exception:
-        _print("🔐 機密ストアバックエンド: (unknown)")
 
     _print("✅ 起動完了 (Ctrl-Cで終了します)")
 

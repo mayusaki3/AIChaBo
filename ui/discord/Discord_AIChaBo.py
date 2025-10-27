@@ -1,5 +1,5 @@
 # 起動スクリプト（asyncio.run + signal/atexit で安全に終了）
-import os, asyncio, signal, atexit, logging
+import os, asyncio, signal, atexit, logging, pathlib
 from dotenv import load_dotenv
 from ui.discord.runtime.client import client, tree
 from ui.discord.runtime.shutdown import on_graceful_shutdown
@@ -12,6 +12,19 @@ async def _main():
     # SDK系のverboseログを抑制（秘匿情報が混入しないよう最低限の防御）
     for noisy in ("httpx","openai","anthropic","google","aiohttp"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
+
+    root = pathlib.Path(__file__).resolve().parents[2]
+    version = "v0.01"
+    try:
+        vfile = root / "VERSION"
+        if vfile.exists():
+            version = vfile.read_text(encoding="utf-8").strip() or version
+    except Exception:
+        pass
+    banner = f"😊 AIChaBo/あいちゃぼ {version}"
+    print("+-------------------------------------------------")
+    print(f"| {banner} 起動します。")
+    print("+-------------------------------------------------")
 
     register_all(tree)
 
