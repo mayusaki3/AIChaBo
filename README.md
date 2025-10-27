@@ -6,7 +6,7 @@ AIChaBo（あいちゃぼ）は、ユーザーが発行した API キーを使�
 利用者の認証情報に API キー を設定する仕組みのため、LLMの利用料は利用者が負担する形になります。  
 サーバー単位で利用者の認証情報を共有することもでき、その場合は共有元の利用者が利用料を負担することになります。  
 使用される認証情報は、利用者が設定した認証情報＞共有された認証情報 となっています。  
-API キー は暗号化して保管しています。（Fernet/DPAPIを利用）
+API キー は暗号化して保管しています。（Fernetを利用）
 
 ## 環境変数の設定（Discord用）
 
@@ -92,11 +92,6 @@ python -m venv venv
 ### 3) requirements.txt に応じて依存ライブラリをインストール
 ```shell
 pip install -r requirements.txt
-# Windowsで機密ストアバックエンドにDPAPIを使用する場合
-pip install pywin32
-set AC_SECRET_BACKEND=
-# Windowsでpywin32インストール済みの状態で機密ストアバックエンドにFernetを使用する場合
-set AC_SECRET_BACKEND=fernet
 ```
 
 ```shell
@@ -170,10 +165,7 @@ Fernet起動時の既定は「ユーザーのホーム配下」です。
 - macOS/Linux: ~/.aichabo/master.key
 
 同じ場所にフォルダ ~/.aichabo/ も作られます。  
-※ AC_MASTER_KEY を環境変数で与えている場合は master.keyファイルは作られません。DPAPI（AC_SECRET_BACKEND=dpapi）起動時も同様です。
-
-DPAPIの場合の既定は「ユーザーのホーム配下」です。
-- Windows: C:\Users\<あなたのユーザー名>\.aichabo\（＋機密データのJSON等）
+※ AC_MASTER_KEY を環境変数で与えている場合は master.keyファイルは作られません。
 
 ## /コマンド一覧（Discord）
 
