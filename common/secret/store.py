@@ -147,6 +147,14 @@ class SecretStore:
             node[provider] = self._enc(key_bytes)
             self._save_json(SERVERS_JSON, data)
 
+    def get_server_key(self, guild_id: int, provider: str) -> Optional[bytes]:
+        """指定サーバー×プロバイダの鍵を1件だけ返す（無ければ None）。"""
+        prov = (provider or "").strip().lower()
+        if not prov:
+            return None
+        all_keys = self.get_server_keys(guild_id)
+        return all_keys.get(prov)
+
     def get_server_keys(self, guild_id: int) -> Dict[str, bytes]:
         """指定サーバーの全プロバイダ鍵を返す（復号できたものだけ）。"""
         with self._lock:
