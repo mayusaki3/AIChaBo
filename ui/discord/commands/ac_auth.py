@@ -8,6 +8,7 @@
 import json
 import discord
 from discord import app_commands, Interaction
+from common.chat.provider import normalize_provider
 from common.utils import jsonc
 from common.session.user_session_manager import user_session_manager as USM
 from common.secret.store import store
@@ -33,13 +34,6 @@ HELP_TEXT = {
     "usage": "/ac_auth <file>",
     "description": "あいちゃぼが使用するAIチャット/画像認識/画像生成の認証情報を登録します。"
 }
-
-def _normalize_provider(name: str) -> str:
-    n = (name or "").strip().lower()
-    if n in ("openai",): return "openai"
-    if n in ("google", "gemini"): return "gemini"
-    if n in ("anthropic", "claude"): return "claude"
-    return n
 
 def _require_fields(section: dict, fields: list[str], prefix: str) -> list[str]:
     missing = []
@@ -99,9 +93,9 @@ async def ac_auth_command(interaction: Interaction, file: discord.Attachment):
             await interaction.followup.send(f"❌ 必須フィールドが不足しています: {', '.join(missing)}", ephemeral=True); return
 
         # provider 正規化
-        chat_provider   = _normalize_provider(auth_json["chat"]["provider"])
-        vision_provider = _normalize_provider(auth_json["vision"]["provider"])
-        image_provider  = _normalize_provider(auth_json["imagegen"]["provider"])
+        chat_provider   = normalize_provider(auth_json["chat"]["provider"])
+        vision_provider = normalize_provider(auth_json["vision"]["provider"])
+        image_provider  = normalize_provider(auth_json["imagegen"]["provider"])
 
         # ----- 実アカウント検証（既存ロジックを踏襲） -----
         try:

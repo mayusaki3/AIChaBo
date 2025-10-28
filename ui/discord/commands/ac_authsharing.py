@@ -4,7 +4,6 @@
 # - 非機密( provider/model/追加パラメータ/プロンプト等 ) → ServerSession に保存
 # - APIキー → SecretStore の「サーバー鍵」として保存
 # ------------------------------------------------------------
-import json
 import discord
 from discord import app_commands, Interaction
 from common.session.user_session_manager import user_session_manager
@@ -98,8 +97,4 @@ async def ac_authsharing_command(interaction: Interaction):
         f"👀{user_auth['vision']['provider']}/{user_auth['vision']['model']}, "
         f"🖼️{user_auth['imagegen']['provider']}/{user_auth['imagegen']['model']}"
     )
-    note = "🔐 サーバー共有鍵を保存しました" if copied else "⚠️ サーバー共有鍵は保存されませんでした（ユーザー鍵未登録）"
-    await interaction.followup.send(
-        redact(f"{warn_prefix}✅ 現在の認証情報［ {auth} ］を共有しました。"),
-        ephemeral=True
-    )
+    await interaction.followup.send(redact(f"{warn_prefix}✅ 現在の認証情報［ {auth} ］を共有しました。"), ephemeral=True)
