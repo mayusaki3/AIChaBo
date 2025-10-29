@@ -1,31 +1,47 @@
 # utiltests/chat_loop_test.py
-# -*- coding: utf-8 -*-
-"""
-chat_loop.run() を単体で叩く最小テスト。
-- 実装がスタブの状態でも通る（スタブの戻り値が出力されればOK）。
-- 実装済みの場合は、non_secret_auth など context 仕様に合わせて入力を調整。
-"""
+# コメント: .envtest の有無で実鍵/モックを自動切替。存在するプロバイダだけテスト。
+import os, asyncio
+from utiltests._secrets import seed, cleanup, OPENAI_KEY, CLAUDE_KEY, GEMINI_KEY, TEST_USER_ID, TEST_GUILD_ID
+from common.chat import chat_loop
 
-import asyncio
-from common.chat.chat_loop import run as chat_run  # 実行対象（スタブでも可）
+from dotenv import load_dotenv, find_dotenv
+if not load_dotenv(dotenv_path=".envtest"):
+    os.environ["AIChaBo_TEST_MOCK"] = "1"  # .envtest 無→モックON
+
+async def run_one(provider: str, text: str):
+    from utiltests.test_helpers import build_min_context_for_test
+    # テスト用コンテキスト（provider/model 等を内包）
+    ctx = build_min_context_for_test(provider=provider)
+    # 実行：chat_loop が APIキー/モデルを内部解決
+    out = await chat_loop.run(
+        user_text=text,
+        context=ctx,
+    )
+    print(f"[{provider}] -> {out[:120]}")
 
 async def main():
-    # chat_loop.run() に渡す context の最小形（プロジェクトの仕様に合わせて拡張可能）
-    ctx = {
-        "guild_id": 222,
-        "thread_id": 333,
-        "user_id": 111,
-        "options": {},  # サーバー運用オプション（printmsg/threads_only 等）を載せる場所
-        "non_secret_auth": {
-            # 非機密の“方針”のみ（API キーの解決は chat_loop 側で行う設計）
-            "chat": {"provider": "openai", "model": "gpt-4o-mini"}
-        },
-        # attachments や追加メタが必要ならここに追加
-    }
-
-    out = await chat_run("chat_loop の最小テスト入力", ctx)
-    print(out)
+    seed()
+    try:
+        if os.getenv("AIChaBo_TEST_MOCK") == "1":
+            # モック用の指示（「mock, …」を含む context を渡すための入力文字列）
+            await run_one("openai", "mock, please return short echo for test")
+            await run_one("anthropic", "mock, speak as BOT for unit-test")
+            await run_one("google", "mock, reply with OK:g")
+        else:
+            if OPENAI_KEY:
+                await run_one("openai", "Hello from test")
+            else:
+                print("SKIP: openai (no key)")
+            if CLAUDE_KEY:
+                await run_one("anthropic", "Hello from test")
+            else:
+                print("SKIP: anthropic (no key)")
+            if GEMINI_KEY:
+                await run_one("google", "Hello from test")
+            else:
+                print("SKIP: google (no key)")
+    finally:
+        cleanup()
 
 if __name__ == "__main__":
-    # asyncio 実行
     asyncio.run(main())

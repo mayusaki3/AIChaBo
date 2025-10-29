@@ -1,5 +1,6 @@
 # ai/gemini/gemini_api.py
 import aiohttp, asyncio, json, base64
+import os
 from typing import List
 
 _GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
@@ -79,6 +80,10 @@ def _extract_b64_from_imagen_predict(resp_json: dict) -> str | None:
 
 # チャットAPIを呼び出す
 async def call_gemini_chat(context_list: List[str], api_key: str, model: str = "gemini-1.5-pro", max_tokens: int = 1024) -> str:
+    if os.getenv("AIChaBo_TEST_MOCK") == "1":
+        from utiltests.mocks.mock_chat import mock_chat
+        return await mock_chat("gemini", context_list)
+    
     contents, system_text = _build_contents_from_context(context_list)
     payload = {
         "contents": contents if contents else [{"role": "user", "parts": [{"text": "Hello"}]}],

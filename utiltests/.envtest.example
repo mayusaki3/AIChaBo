@@ -1,0 +1,12 @@
+# このファイルを '.envtest' にコピーして、プロバイダを呼び出すテストで使用するAPIキーを設定してください。
+# APIキーを設定したファイルは公開しないでください。
+
+# APIキー設定
+AIChaBo_TEST_OPENAI_KEY=
+AIChaBo_TEST_CLAUDE_KEY=
+AIChaBo_TEST_GEMINI_KEY=
+
+# モック設定
+#   0=LLM呼び出し（APIキー設定が必要）
+#   1=モック使用
+AIChaBo_TEST_MOCK=1

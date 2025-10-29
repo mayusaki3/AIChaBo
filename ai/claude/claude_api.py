@@ -1,5 +1,6 @@
 # ai/claude/claude_api.py
 import aiohttp, asyncio, json
+import os
 from typing import List
 
 _ANTHROPIC_BASE = "https://api.anthropic.com/v1"
@@ -27,6 +28,10 @@ async def _post(session: aiohttp.ClientSession, url: str, headers: dict, payload
 
 # チャットを呼び出す
 async def call_claude_chat(context_list: List[str], api_key: str, model: str = "claude-3-5-sonnet-latest", max_tokens: int = 1024) -> str:
+    if os.getenv("AIChaBo_TEST_MOCK") == "1":
+        from utiltests.mocks.mock_chat import mock_chat
+        return await mock_chat("claude", context_list)
+    
     messages, system_text = _build_messages_from_context(context_list)
     headers = {
         "x-api-key": api_key,

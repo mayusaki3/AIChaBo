@@ -2,8 +2,10 @@ __pycache__/
 .env
 .env_prod
 .env_dev
+.envtest
 venv
 common/session/dump/
+common/secret/test/
 ui/discord/data/threads/
 
 .aichabo/

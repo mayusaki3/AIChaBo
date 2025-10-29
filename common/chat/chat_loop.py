@@ -29,6 +29,7 @@ chat_loop.py
 from __future__ import annotations
 
 from typing import Any, Dict, Optional
+import importlib
 
 # --- 共通ユーティリティ／管理 ---
 from common.utils.redact import redact
@@ -51,26 +52,33 @@ from common.session.server_session_manager import server_session_manager as SSM
 # --- プロバイダ呼び出しの薄いラッパ（既存 ai/* ラッパを呼ぶ） -----------------
 def _get_provider_chat_fn(provider: str):
     """
-    provider 別のチャット実行関数を取得する。
-    ここでは「テキスト→テキスト」1往復の最小IFを想定。
-
-    期待される関数シグネチャ（各ラッパ側）:
-        async def chat(api_key: str, model: str, user_text: str, **kwargs) -> str
+    各プロバイダの“チャット入口関数”を動的に解決する。
+    候補名のいずれかが見つかれば採用（既存実装名を壊さない）。
+    期待IF: async def <entry>(context_list:list[str], api_key:str, model:str, **kwargs) -> str
+    ※テキスト専用。Vision/画像生成（analyze_*/generate_*）は扱わない。
     """
     p = normalize_provider(provider)
-    if p == "openai":
-        # 例: ai/openai/openai_api.py に chat() がある前提
-        from ai.openai.openai_api import chat as fn
-        return fn
-    if p == "anthropic":
-        from ai.claude.claude_api import chat as fn
-        return fn
-    if p == "google":
-        from ai.gemini.gemini_api import chat as fn
-        return fn
-    # 未対応プロバイダ
-    raise RuntimeError(f"Unsupported provider: {provider}")
+    modmap = {
+        "openai":    "ai.openai.openai_api",
+        "anthropic": "ai.claude.claude_api",
+        "google":    "ai.gemini.gemini_api",
+    }
+    modname = modmap.get(p)
+    if not modname:
+        raise RuntimeError(f"Unsupported provider: {provider}")
+    mod = importlib.import_module(modname)
 
+    # テキスト専用のAPI名のみ
+    preferred = ("call_openai_chat", "call_claude_chat", "call_gemini_chat")
+    for fname in preferred:
+        fn = getattr(mod, fname, None)
+        if callable(fn):
+            return fn
+
+    raise AttributeError(
+        f"No chat entrypoint found in {modname}. "
+        "Set __CHAT_ENTRYPOINT__='function_name' in that module or expose one of the known names."
+    )
 
 # --- APIキー解決 -------------------------------------------------------------
 def _resolve_api_key(
@@ -99,7 +107,6 @@ def _resolve_api_key(
     # 3) 見つからない
     return None
 
-
 # --- モデル・追加パラメータの抽出 --------------------------------------------
 def _extract_chat_policy(context: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -110,7 +117,6 @@ def _extract_chat_policy(context: Dict[str, Any]) -> Dict[str, Any]:
     chat_cfg = ns.get("chat") or {}
     # ここでは provider / model が最低限必要。他は kwargs としてそのまま通す。
     return dict(chat_cfg)
-
 
 # --- 本体：1往復 -------------------------------------------------------------
 async def run(user_text: str, context: Dict[str, Any]) -> str:
@@ -147,7 +153,7 @@ async def run(user_text: str, context: Dict[str, Any]) -> str:
         extra = {k: v for k, v in policy.items() if k not in ("provider", "model")}
 
         # 5) 実行
-        reply = await chat_fn(api_key=api_key, model=model, user_text=user_text, **extra)
+        reply = await chat_fn(context_list=[user_text], api_key=api_key, model=model, **extra)
         if not isinstance(reply, str):
             # ラッパ実装が dict を返した場合などは防御的に文字列化
             reply = str(reply)

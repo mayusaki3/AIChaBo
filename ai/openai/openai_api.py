@@ -1,5 +1,7 @@
 from openai import AsyncOpenAI
 import aiohttp, base64, asyncio, json
+import os
+from typing import List
 
 OPENAI_VISION_ENDPOINT = "https://api.openai.com/v1/chat/completions"
 OPENAI_IMAGEGEN_ENDPOINT = "https://api.openai.com/v1/images/generations"
@@ -7,9 +9,13 @@ OPENAI_IMAGEGEN_ENDPOINT = "https://api.openai.com/v1/images/generations"
 # 認証情報で指定されたAPIを呼び出す
 
 # ChatGPTにメッセージ送信
-async def call_chatgpt(context_list: list[dict], api_key: str, model: str = "gpt-3.5-turbo", max_tokens: int = 1024) -> str:
+async def call_openai_chat(context_list: List[str], api_key: str, model: str = "gpt-3.5-turbo", max_tokens: int = 1024) -> str:
+    if os.getenv("AIChaBo_TEST_MOCK") == "1":
+        from utiltests.mocks.mock_chat import mock_chat
+        return await mock_chat("openai", context_list)
+    
     messages = []
-    for msg in context_list:
+    for msg in context_list or []:
         if msg.startswith("\\s"):
             messages.append({"role": "system", "content": msg.replace("\\s", "", 1).strip()})
         else:
