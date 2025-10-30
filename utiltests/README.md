@@ -6,19 +6,21 @@ CI で回すことを想定し、書き込みを伴うテストは **既定で s
 ## 各テストの目的と実行方法
 
 ### 1) コア・ユーティリティ
-- **provider_test.py**  
-    `common/chat/provider.py` の `normalize_provider` / `display_provider` の網羅テスト。
+- **Provider（T01）**  
+    テスト対象モジュール: `common/chat/provider.py`  
+    プロバイダ名の正規化/表示名の単体検証（I/Oなし・常時実行可）
 
     ```shell
-    python -m utiltests.provider_test
+    python -m utiltests.T01_Provider_01_provider_test
     ```
 
 ### 2) シークレットストア
-- **store_test.py**  
-    SecretStore の基本/並行書き込み（last-writer-wins, no corruption）。
+- **SecretStore（T02）**  
+    テスト対象モジュール: `common/secret/store.py`  
+    SecretStore の基本R/Wと並行書込みの健全性（LWW/非破壊）を検証
 
     ```shell
-    python -m utiltests.store_test
+    python -m utiltests.T02_SecretStore_01_store_test
     ```
 
 ### 3) 認証フロー

@@ -1,18 +1,19 @@
 # -*- coding: utf-8 -*-
 """
-context_test.py
-- message.build_context() 相当のコンテキスト組み立てテストの雛形
-- まだDiscordイベント層に依存が残るため、既定では SKIP
-- 将来、引数を dict で受けられるよう抽象化してから有効化
+T07_Context_01_context_test.py
+目的: build_context 相当の検証（Discord依存を剥がすまで SKIP）
+実行例: python -m utiltests.T07_Context_01_context_test
 """
 import unittest
-import os
+from utiltests._report import run_unittest_suite
 
-@unittest.skip("build_context のDiscord依存を剥がしてから有効化する予定")
+@unittest.skip("build_context のDiscord依存を剥がしてから有効化予定")
 class ContextBuildTest(unittest.TestCase):
-    def test_build_context_skeleton(self):
+    def test_01_skeleton(self):
+        """ひな形（将来差し替え）"""
         self.assertTrue(True)
 
-
 if __name__ == "__main__":
-    unittest.main()
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(ContextBuildTest)
+    mapping = {"test_01_skeleton": ("T07-01-01", "skeleton")}
+    run_unittest_suite("T07-01", suite, mapping)
