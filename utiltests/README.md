@@ -24,8 +24,9 @@ CI で回すことを想定し、書き込みを伴うテストは **既定で s
     ```
 
 ### 3) 認証フロー
-- **auth_resolve_test.py**（既定 skip）  
-    common/chat/auth.resolve_auth_and_key() のスケルトン。USM/SSM/Store を使用。
+- **Auth（T03**  
+    resolve_auth_and_key() の最低限の骨組検証（既定SKIP）  
+    USM/SSM/Store を使用。
 
     ```shell
     # 有効化

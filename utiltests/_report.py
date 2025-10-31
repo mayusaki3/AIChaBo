@@ -4,6 +4,8 @@ from contextlib import contextmanager
 import traceback
 from typing import Dict, Tuple
 import unittest
+import io  # 追加: unittest標準出力を抑制するため
+import sys
 
 class _Reporter:
     def __init__(self, suite_id: str):
@@ -64,19 +66,26 @@ class VerboseResult(unittest.TextTestResult):
         tid, title = self._lookup(test)
         self._rep.ng += 1
         print(f"[{tid}] {title} ... NG")
-        self._rep.stream.writeln(self._exc_info_to_string(err, test))
+        # 標準出力に失敗詳細を直接出す（runner.stream に依存しない）
+        detail = self._exc_info_to_string(err, test)
+        print(detail.strip())
 
     def addError(self, test, err):
         super().addError(test, err)
         tid, title = self._lookup(test)
         self._rep.ng += 1
         print(f"[{tid}] {title} ... NG")
-        self._rep.stream.writeln(self._exc_info_to_string(err, test))
+        detail = self._exc_info_to_string(err, test)
+        print(detail.strip())
 
 def run_unittest_suite(suite_id: str, suite: unittest.TestSuite, mapping: Dict[str, Tuple[str, str]]):
+    """unittest スイートを実行し、共通レポータのみで要約を出力（unittest要約は抑制）"""
     rep = make_reporter(suite_id)
     rep.banner("unittest suite")
+    # unittestの標準出力を吸収して非表示化
+    silent = io.StringIO()
     runner = unittest.TextTestRunner(
+        stream=silent,         # ★ 既定の "Ran X tests" / "OK" を抑制
         verbosity=0,
         resultclass=lambda *a, **kw: VerboseResult(*a, reporter=rep, mapping=mapping, **kw)
     )
