@@ -1,2 +1,18 @@
 [run]
+branch = True
+#source =
+#    ai
+#    common
+#    ui
+#    utiltests
 omit =
+    */__init__.py
+    utiltests/*
+    */site-packages/*
+    # 必要に応じてさらに除外:
+    # ui/discord/*
+
+[report]
+show_missing = True
+skip_covered = False
+precision = 1

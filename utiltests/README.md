@@ -81,6 +81,7 @@ USM / SSM / SecretStore に**テスト用認証情報**を流し込むユーテ�
 | **T01-01-01** | エイリアス正規化 | known → canonical 変換 | `common/chat/provider.py` |
 | **T01-01-02** | 未知入力処理 | unknown → lower-case | `common/chat/provider.py` |
 | **T01-01-03** | 表示統一 | display label の一致 | `common/chat/provider.py` |
+| **T01-01-04** | 空入力防御 | `display_provider("")` / `display_provider(None)` が空文字を返す | `common/chat/provider.py` |
 
 #### 実行
 
