@@ -12,3 +12,6 @@ ui/discord/data/threads/
 **/.aichabo/
 master.key
 **/master.key
+
+.coverage
+htmlcov

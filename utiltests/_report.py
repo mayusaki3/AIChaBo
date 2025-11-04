@@ -1,5 +1,5 @@
 # utiltests/_report.py
-# 統一出力: [Txx-yy] タイトル ... OK / NG
+# 統一出力: ✅/❌[Txx-yy] タイトル
 from contextlib import contextmanager
 import traceback
 from typing import Dict, Tuple
@@ -22,22 +22,21 @@ class _Reporter:
         """スクリプト系テストでの1ケース。例: with rep.case('openai echo'): ..."""
         self.seq += 1
         tid = f"{self.suite_id}-{self.seq:02d}"
-        print(f"[{tid}] {title} ... ", end="", flush=True)
         try:
             yield tid
         except Exception as e:
             self.ng += 1
-            print("NG")
+            print(f"❌[{tid}] {title}")
             print(f"[{tid}] {type(e).__name__}: {e}")
             tb = traceback.format_exc(limit=3)
             print(tb.strip())
         else:
             self.ok += 1
-            print("OK")
+            print(f"✅[{tid}] {title}")
 
     def summary(self):
         total = self.ok + self.ng
-        print(f"--- SUMMARY {self.suite_id}: OK={self.ok} / NG={self.ng} / TOTAL={total} ---")
+        print(f"--- SUMMARY {self.suite_id}: ✅={self.ok} / ❌={self.ng} / TOTAL={total} ---")
 
 def make_reporter(suite_id: str) -> _Reporter:
     return _Reporter(suite_id)
@@ -59,13 +58,13 @@ class VerboseResult(unittest.TextTestResult):
         super().addSuccess(test)
         tid, title = self._lookup(test)
         self._rep.ok += 1
-        print(f"[{tid}] {title} ... OK")
+        print(f"✅[{tid}] {title}")
 
     def addFailure(self, test, err):
         super().addFailure(test, err)
         tid, title = self._lookup(test)
         self._rep.ng += 1
-        print(f"[{tid}] {title} ... NG")
+        print(f"❌[{tid}] {title}")
         # 標準出力に失敗詳細を直接出す（runner.stream に依存しない）
         detail = self._exc_info_to_string(err, test)
         print(detail.strip())
@@ -74,7 +73,7 @@ class VerboseResult(unittest.TextTestResult):
         super().addError(test, err)
         tid, title = self._lookup(test)
         self._rep.ng += 1
-        print(f"[{tid}] {title} ... NG")
+        print(f"❌[{tid}] {title}")
         detail = self._exc_info_to_string(err, test)
         print(detail.strip())
 

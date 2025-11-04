@@ -1,84 +1,191 @@
-# utiltests
+# テストユーティリティ
 
-Discord を介さずに **コア機能の健全性** を確認するための軽量テスト群です。  
-CI で回すことを想定し、書き込みを伴うテストは **既定で skip / dry-run** になります。
+Discord を介さずに **コア機能の健全性** を確認するためのテスト群です。  
+CI 実行を想定し、書き込みを伴うテストは **既定で skip / dry-run** です。  
+  
+開発テスト用に以下のインストール作業を行ってください。
+```shell
+pip install -r requirements-dev.txt
+```
+各テストは「python -m utiltests.*」で実行しますが、以下の形式で実行すると、テストのカバー率が確認できます。
+```shell
+# テスト実行（通常実行）
+python -m utiltests.T01_Provider_01_provider_test
 
-## 各テストの目的と実行方法
+# テスト実行（カバー率確認：単一）
+coverage run -m utiltests.T01_Provider_01_provider_test
 
-### 1) コア・ユーティリティ
-- **Provider（T01）**  
-    テスト対象モジュール: `common/chat/provider.py`  
-    プロバイダ名の正規化/表示名の単体検証（I/Oなし・常時実行可）
+# テスト実行（カバー率確認：全体）
+coverage run -m unittest discover -s utiltests -p "*_test.py"
 
-    ```shell
-    python -m utiltests.T01_Provider_01_provider_test
-    ```
+# テスト実行（カバー率確認：全体・結果を累積）
+coverage erase
+coverage run -a -m utiltests.T01_Provider_01_provider_test
+coverage run -a -m utiltests.T02_SecretStore_01_store_test
+#    :             以下、残りのテストを実施
 
-### 2) シークレットストア
-- **SecretStore（T02）**  
-    テスト対象モジュール: `common/secret/store.py`  
-    SecretStore の基本R/Wと並行書込みの健全性（LWW/非破壊）を検証
+# カバー率レポート表示
+coverage report -m
+# カバー率レポート詳細表示（ブラウザ表示）
+coverage html
+htmlcov/index.html
+```
 
-    ```shell
-    python -m utiltests.T02_SecretStore_01_store_test
-    ```
+## テスト番号と検証内容（Index）
 
-### 3) 認証フロー
-- **Auth（T03**  
-    resolve_auth_and_key() の最低限の骨組検証（既定SKIP）  
-    USM/SSM/Store を使用。
+> すべてのテストは共通レポータにより  
+> `✅/❌[Txx-yy-zz] <タイトル>`  
+> `--- SUMMARY Txx-yy: ✅=N / ❌=M / TOTAL=K ---`  
+> を出力します。  
+> unittest は **メソッド名の昇順**（`test_01_*` → `test_02_*` …）で実行します。
 
-    ```shell
-    # 有効化
-    # - PowerShell
-    $env:AIChaBo_TEST_ENABLE_AUTH_RESOLVE=1
-    # - Linux/macOS (bash/zsh)
-    export AIChaBo_TEST_ENABLE_AUTH_RESOLVE=1
-
-    python -m utiltests.auth_resolve_test
-
-    # 無効化（既定 skip に戻す）
-    # - PowerShell
-    Remove-Item Env:AIChaBo_TEST_ENABLE_AUTH_RESOLVE
-    # - Linux/macOS (bash/zsh)
-    unset AIChaBo_TEST_ENABLE_AUTH_RESOLVE
-    ```
-
-- **auth_seed.py**（ユーティリティ）  
-    Discord なしで USM/SSM/SecretStore にテスト認証情報を流し込み（既定 DRY-RUN、--confirm で実書き込み）。
-
-    ```shell
-    python -m utiltests.auth_seed --help
-    ```
-
-### 4) メッセージ/文脈（Discord 非依存）
-- **context_test.py**（将来拡張枠）  
-    message.build_context() のテスト。Discord 依存剥離後に有効化。
-
-- **message_test.py**  
-    run_once_for_test() を用いたメッセージ経路の最小確認。
-
-    ```shell
-    python -m utiltests.message_test
-    ```
-
-### 5) チャットループ
-- **chat_loop_test.py**  
-    common/chat/chat_loop.run() の単体テスト（スタブでも可）。
-
-    ```shell
-    python -m utiltests.chat_loop_test
-    ```
-
-### auth_seed.py
-Discord なしで USM / SSM / SecretStore にテスト用の認証情報を流し込むユーティリティ。
-既定は DRY-RUN。--confirm 指定時のみ書き込み。
-
-## 注意事項
-
-- 本番データに影響しない ように、CI 環境では SecretStore の保存先を隔離することを推奨します。
-- auth_seed.py は便宜上のユーティリティであり、*本番運用では /ac_ コマンドを利用**してください。
+| Suite | 目的（スコープ） | 機能 | モジュール |
+|---|---|---|---|
+| **T01-01** | Provider 正規化 | alias normalize / display | `common/chat/provider.py` |
+| **T02-01** | SecretStore R/W・競合 | R/W / concurrent LWW | `common/secret/store.py` |
+| **T03-01** | Auth 解決（opt-in） | resolve empty | `common/chat/auth.py` |
+| **T04-01** | ChatCore モック LLM | provider echo | `ui/discord/services/chat_core.py` |
+| **T05-01** | ChatLoop MOCK | minimal run / provider echo | `common/chat/chat_loop.py` |
+| **T06-01** | Message 最小経路 | run_once_for_test | `common/chat/message.py` |
+| **T07-01** | Context（SKIP） | future ctx build | `message.build_context()` |
 
 ---
 
-このセットで「Discord 非依存の範囲」を先にテスト可能にできます。  
+### ルール
+
+- unittest 標準要約は非表示 → **共通レポータのみ**
+- 実行順は **メソッド名順**
+- **破壊的テストは opt-in**
+  - `.envtest` → REAL モード
+  - `AIChaBo_TEST_ENABLE_AUTH_RESOLVE=1` → Auth テスト有効化
+
+---
+
+### auth_seed.py
+
+USM / SSM / SecretStore に**テスト用認証情報**を流し込むユーティリティ。  
+既定 DRY-RUN。**`--confirm`** で書込み。
+
+> 本番運用では `/ac_` コマンドを使用
+
+---
+
+## テスト詳細
+
+### T01-01 : Provider 正規化
+
+#### ケース
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T01-01-01** | エイリアス正規化 | known → canonical 変換 | `common/chat/provider.py` |
+| **T01-01-02** | 未知入力処理 | unknown → lower-case | `common/chat/provider.py` |
+| **T01-01-03** | 表示統一 | display label の一致 | `common/chat/provider.py` |
+
+#### 実行
+
+```bash
+python -m utiltests.T01_Provider_01_provider_test
+```
+
+---
+
+### T02-01 : SecretStore 基本 & LWW
+
+#### ケース
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T02-01-01** | user key R/W | roundtrip | `common/secret/store.py` |
+| **T02-01-02** | server key R/W | roundtrip | `common/secret/store.py` |
+| **T02-01-03** | LWW（user） | 同時書込 → provider単位 LWW / 破損なし | `common/secret/store.py` |
+| **T02-01-04** | LWW（server） | 同時書込 → provider単位 LWW / 破損なし | `common/secret/store.py` |
+
+#### 実行
+
+```bash
+python -m utiltests.T02_SecretStore_01_store_test
+```
+
+---
+
+### T03-01 : Auth 解決（opt-in）
+
+#### ケース
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T03-01-01** | 無認証解決 | 空 dict | `common/chat/auth.py` |
+
+#### 実行
+
+```bash
+# bash/zsh
+export AIChaBo_TEST_ENABLE_AUTH_RESOLVE=1
+python -m utiltests.T03_Auth_01_auth_resolve_test
+unset AIChaBo_TEST_ENABLE_AUTH_RESOLVE
+
+# PowerShell
+$env:AIChaBo_TEST_ENABLE_AUTH_RESOLVE=1
+python -m utiltests.T03_Auth_01_auth_resolve_test
+Remove-Item Env:AIChaBo_TEST_ENABLE_AUTH_RESOLVE
+```
+
+---
+
+### T04-01 : ChatCore モック LLM
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T04-01-01** | OpenAI echo | モック応答検証 | `ui/discord/services/chat_core.py` |
+| **T04-01-02** | Gemini echo | モック応答検証 | `ui/discord/services/chat_core.py` |
+| **T04-01-03** | Claude echo | モック応答検証 | `ui/discord/services/chat_core.py` |
+
+```bash
+python -m utiltests.T04_ChatCore_01_chat_core_test
+```
+
+---
+
+### T05-01 : ChatLoop MOCK
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T05-01-01** | OpenAI echo | MOCK 応答 | `common/chat/chat_loop.py` |
+| **T05-01-02** | Anthropic echo | MOCK 応答 | `common/chat/chat_loop.py` |
+| **T05-01-03** | Google echo | MOCK 応答 | `common/chat/chat_loop.py` |
+
+```bash
+python -m utiltests.T05_ChatLoop_01_chat_loop_test
+```
+
+---
+
+### T06-01 : Message 最小経路
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T06-01-01** | 最小実行パス | run_once_for_test 経路通過 | `common/chat/message.py` |
+
+```bash
+python -m utiltests.T06_Message_01_message_test
+```
+
+---
+
+### T07-01 : Context（SKIP）
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T07-01-01** | 将来拡張 | skeleton（SKIP） | `message.build_context()` |
+
+```bash
+python -m utiltests.T07_Context_01_context_test
+```
+
+---
+
+## 備考
+
+このテストセットにより、  
+**Discord 非依存**の範囲を先にテストできます（高速／安全／CI 向き）。
