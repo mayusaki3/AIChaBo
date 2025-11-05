@@ -17,14 +17,7 @@ import pathlib
 import tempfile
 import threading
 from typing import Dict, Optional
-
-try:
-    from cryptography.fernet import Fernet
-except Exception as e:
-    raise RuntimeError(
-        "Fernet を使用しますが 'cryptography' が見つかりません。"
-        "次を実行してください: pip install cryptography"
-    ) from e
+from cryptography.fernet import Fernet
 
 # ~/.aichabo/secretstore 配下に JSON を作る
 HOME_DIR = pathlib.Path.home()
