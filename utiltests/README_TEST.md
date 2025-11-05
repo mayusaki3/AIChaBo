@@ -183,11 +183,19 @@ python -m utiltests.T02_SecretStore_04_store_misc_test
 
 ### T03-01 : Auth 解決（opt-in）
 
+> 実行前に `AIChaBo_TEST_ENABLE_AUTH_RESOLVE=1` を設定してください（安全のため既定は SKIP ）。
+
 #### ケース
 
 | 番号 | 目的 | 検証内容 | モジュール |
 |---|---|---|---|
-| **T03-01-01** | 無認証解決 | 空 dict | `common/chat/auth.py` |
+| **T03-01-01** | 無認証解決 | USM/SSM 空、keys 無 → `{}` | `common/chat/auth.py` |
+| **T03-01-02** | USMのみ非機密 | USMに provider/model、keys 無 → `{}` | `common/chat/auth.py` |
+| **T03-01-03** | ユーザー鍵優先 | USM( provider/model ) + user_key → 解決（`max_tokens` 既定付与） | `common/chat/auth.py` |
+| **T03-01-04** | サーバ鍵フォールバック | user_key 無、server_keys に `openai` → 解決 | `common/chat/auth.py` |
+| **T03-01-05** | provider正規化 | USM provider が `OPENAI` でも normalize → `openai` キーに一致 | `common/chat/auth.py` |
+| **T03-01-06** | model欠落 | providerのみ → `{}` | `common/chat/auth.py` |
+| **T03-01-07** | SSM優先（USM無） | USM 無・SSM に provider/model、server_keys で解決 | `common/chat/auth.py` |
 
 #### 実行
 
