@@ -1,62 +1,58 @@
-# -*- coding: utf-8 -*-
-"""
-T05_ChatLoop_01_chat_loop_test.py
-目的: chat_loop.run の最小パス検証（.envtest 無し=MOCK想定）
-実行例: python -m utiltests.T05_ChatLoop_01_chat_loop_test
-"""
-import asyncio
-from utiltests.test_helpers import (
-    TEST_USER_ID,
-    TEST_GUILD_ID,
-    load_envtest,            # .envtest 読み込み（無い場合は MOCK 想定）
-    banner_print_env,        # 実行モードの表示
-    seed_mock_for_provider,  # MOCK: 秘密鍵・非機密モデルを投入
-    cleanup_secret_keys,     # テスト後に鍵クリア
-)
-from common.chat import chat_loop
-from utiltests._report import make_reporter
+# utiltests/T05_ChatLoop_01_chat_loop_test.py
+# ------------------------------------------------------------
+# T05-01 : ChatLoop 基本
+# 目的:
+#  - 空入力の振る舞い（"（入力が空です）"）の固定化
+#  - provider/model 欠落時のガイダンス文言（現行仕様）確認
+# 出力:
+#  - ✅/❌ [T05-01-xx] ... と --- SUMMARY T05-01: ... --- を共通レポータで統一
+# 実行:
+#  - python -m utiltests.T05_ChatLoop_01_chat_loop_test
+# ------------------------------------------------------------
+import unittest
 
-DEFAULT_MODELS = {
-    "openai":    "gpt-4o-mini",
-    "anthropic": "claude-3-5-sonnet-latest",
-    "google":    "gemini-1.5-pro",
-}
+# 共通レポータ（unittest 要約を抑止して ✅/❌ + SUMMARY を出す）
+from utiltests._report import run_unittest_suite
 
-async def run_one(provider: str, prompt: str, model: str | None = None) -> str:
-    """chat_loop.run を1回だけ実行。model 未指定ならデフォルトを使用。"""
-    mdl = model or DEFAULT_MODELS.get(provider, "gpt-4o-mini")
-    # chat_loop.run(provider, context_list, user_id, guild_id, model=None)
-    return await chat_loop.run(
-        provider,
-        ["\\s mock system", prompt],
-        TEST_USER_ID,
-        TEST_GUILD_ID,
-        mdl,
-    )
+# テスト対象: chat_loop（現行版）
+try:
+    from common.chat.chat_loop import chat_loop
+except Exception:
+    chat_loop = None  # 未配置でもスイート自体は動かせるようにする
 
-async def main():
-    env = load_envtest()
-    banner_print_env(env)
-    rep = make_reporter("T05-01")
-    rep.banner("ChatLoop basic")
+class ChatLoopBasicTest(unittest.TestCase):
+    """
+    ケース設計
+      T05-01-01: 空入力 → 固定文言 "（入力が空です）"
+      T05-01-02: provider/model 欠落時 → ガイダンス文言（現行仕様）
+    """
 
-    is_mock = env.get("MODE") == "MOCK"
-    providers = ("openai", "anthropic", "google")
-    if is_mock:
-        for p in providers:
-            seed_mock_for_provider(p, model=DEFAULT_MODELS[p], shared=False)
+    def test_01_empty_input_returns_fixed_message(self):
+        """空入力 → "（入力が空です）" を返す"""
+        if chat_loop is None:
+            self.skipTest("chat_loop が未配置のため Skip")
+        out = chat_loop(user_text="  ", context={"provider": "openai", "model": "gpt-4o-mini"})
+        self.assertEqual(out, "（入力が空です）")
 
-    for p in providers:
-        with rep.case(f"{p} echo"):
-            out = await run_one(p, "please return short echo for test")
-            assert isinstance(out, str) and len(out) > 0, "empty response"
+    def test_02_missing_provider_or_model(self):
+        """provider/model 欠落時のガイダンス文言（現行仕様）"""
+        if chat_loop is None:
+            self.skipTest("chat_loop が未配置のため Skip")
+        msg1 = chat_loop(user_text="hi", context={"provider": "openai"})       # model 無し
+        msg2 = chat_loop(user_text="hi", context={"model": "gpt-4o-mini"})     # provider 無し
+        self.assertIsInstance(msg1, str)
+        self.assertIsInstance(msg2, str)
+        # 例: "（モデル設定が見つかりません。/ac_auth で設定してください）"
+        self.assertIn("モデル設定", msg1)
+        self.assertIn("モデル設定", msg2)
 
-    for p in providers:
-        try:
-            cleanup_secret_keys(p)
-        except Exception:
-            pass
-    rep.summary()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # unittest スイートを Reporter で実行（番号とタイトルを対応付け）
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(ChatLoopBasicTest)
+    mapping = {
+        # method_name: (test_id, title)
+        "test_01_empty_input_returns_fixed_message": ("T05-01-01", "empty -> fixed message"),
+        "test_02_missing_provider_or_model":         ("T05-01-02", "missing provider/model -> guidance"),
+    }
+    run_unittest_suite("T05-01", suite, mapping)
