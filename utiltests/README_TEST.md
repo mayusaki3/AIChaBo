@@ -51,6 +51,8 @@ htmlcov/index.html
 | **T05-01** | ChatLoop MOCK | minimal run / provider echo | `common/chat/chat_loop.py` |
 | **T06-01** | Message 最小経路 | run_once_for_test | `common/chat/message.py` |
 | **T07-01** | Context（SKIP） | future ctx build | `message.build_context()` |
+| **T08-01** | UserSession 管理 | get/set/has（api_key 破棄、未登録、None ガード、必須キーはTODO） | `common/session/user_session_manager.py` |
+| **T09-01** | ServerSession 管理 | 共有Auth get/set/clear、options get/set/clear（api_key 破棄、必須キーはTODO） | `common/session/server_session_manager.py` |
 
 ---
 
@@ -211,6 +213,10 @@ python -m utiltests.T03_Auth_01_auth_resolve_test
 Remove-Item Env:AIChaBo_TEST_ENABLE_AUTH_RESOLVE
 ```
 
+#### メモ（仕様の要点）
+- `resolve_auth_and_key(guild_id, user_id)` は **USM → SSM の順で非機密設定**を採用し、**SecretStore（ユーザー→サーバー）でAPIキー**を探索します。  
+- **provider 名は正規化（小文字）**され、SecretStore のキー規約と一致させます。必須の `provider` / `model` / `api_key` のいずれかが欠けると **`{}`** を返します。
+
 ---
 
 ### T04-01 : ChatCore モック LLM
@@ -261,6 +267,38 @@ python -m utiltests.T06_Message_01_message_test
 
 ```bash
 python -m utiltests.T07_Context_01_context_test
+```
+
+---
+
+### T08-01 : UserSession 管理（USM）
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T08-01-01** | 入力ガード | `get_session(None) -> None` | `common/session/user_session_manager.py` |
+| **T08-01-02** | 未登録 | 未登録 `user_id` は `None` | `common/session/user_session_manager.py` |
+| **T08-01-03** | 正常系 | `set_session` → `get_session` で取得、`api_key` は深い階層まで除去 | `common/session/user_session_manager.py` |
+| **T08-01-04** | 必須項目（TODO） | `provider/model` 必須（実装修正後に有効化） | `common/session/user_session_manager.py` |
+
+```bash
+python -m utiltests.T08_UserSession_01_user_session_test
+```
+
+---
+
+### T09-01 : ServerSession 管理（SSM）
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T09-01-01** | 入力ガード | `get_shared_auth_config(None) -> None` | `common/session/server_session_manager.py` |
+| **T09-01-02** | 未登録 | 未登録 `guild_id` は `None` | `common/session/server_session_manager.py` |
+| **T09-01-03** | 正常系 | 共有Auth `set/get`、`api_key` は除去 | `common/session/server_session_manager.py` |
+| **T09-01-04** | クリア | `clear_shared_auth_config` 後は `None` | `common/session/server_session_manager.py` |
+| **T09-01-05** | 必須項目（TODO） | `provider/model` 必須（実装修正後に有効化） | `common/session/server_session_manager.py` |
+| **T09-01-06** | オプション | `set/get/clear option` と `all_options` の動作確認 | `common/session/server_session_manager.py` |
+
+```bash
+python -m utiltests.T09_ServerSession_01_server_session_test
 ```
 
 ---

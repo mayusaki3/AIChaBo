@@ -39,6 +39,18 @@ class UserSessionManager:
     def set_session(self, user_id: int, auth_data: dict):
         uid = str(user_id)
         clean = self._strip_api_keys(auth_data)
+        # 必須: chat.provider / chat.model（空白のみは不可）
+        chat = clean.get("chat") or {}
+        if not isinstance(chat, dict):
+            raise ValueError("chat must be a dict")
+        prov = (chat.get("provider") or "").strip()
+        model = (chat.get("model") or "").strip()
+        if not prov or not model:
+            raise ValueError("chat.provider and chat.model are required")
+        # 正規化（空白除去のみ。display/別正規化は上位で実施）
+        chat["provider"] = prov
+        chat["model"] = model
+        clean["chat"] = chat
         with self._lock:
             clean["user_id"] = uid
             self.sessions[uid] = clean
