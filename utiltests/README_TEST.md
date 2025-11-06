@@ -52,7 +52,7 @@ htmlcov/index.html
 | **T05-02** | ChatLoop Edges | 明示model優先 / policy追加パラメータ透過 / 例外ハンドリング（provider例外→既定メッセージ） | `common/chat/chat_loop.py` |
 | **T05-03** | ChatLoop More Edges | APIキー未設定 / 全メッセージ空白化 / policy=None→既定メッセージ / プロバイダ空文字返却 / プロバイダ関数None→既定メッセージ | `common/chat/chat_loop.py` |
 | **T05-04** | ChatLoop Cover Rest | provider前後空白・大文字許容 / policy={}＋明示model / プロバイダがNone返却→既定メッセージ | `common/chat/chat_loop.py` |
-| **T05-05** | ChatLoop Helper Paths | ヘルパー本体（policy抽出/API鍵解決/provider→chat_fn解決）を実配線で通す | `common/chat/chat_loop.py` |
+| **T05-05** | ChatLoop Helper Paths | セッション由来policy→APIキー解決→provider関数呼出の配線を通す（明示model有無パス／extra透過） | `common/chat/chat_loop.py` |
 | **T06-01** | Message 最小経路 | run_once_for_test | `common/chat/message.py` |
 | **T07-01** | Context（SKIP） | future ctx build | `message.build_context()` |
 
@@ -297,8 +297,9 @@ python -m utiltests.T05_ChatLoop_04_chat_loop_cover_rest_test
 
 | 番号 | 目的 | 検証内容 | モジュール |
 |---|---|---|---|
-| **T05-05-01** | ChatLoop Helper Paths | policy(auth.resolve)→chat_core.send_once まで | `common/chat/chat_loop.py` |
-| **T05-05-02** | ChatLoop Helper Paths | policyにchat_fnなし→_get_provider_chat_fnが解決 | `common/chat/chat_loop.py` |
+| **T05-05-01** | policy→key→provider 呼出 | policy(model)採用・_resolve_api_key・_get_provider_chat_fn を通る／extra受渡 | `common/chat/chat_loop.py` |
+| **T05-05-02** | 明示model優先＋extra透過 | 明示 model が policy を上書き／extra(top_p等) が provider関数へ渡る | `common/chat/chat_loop.py` |
+
 
 ```bash
 python -m utiltests.T05_ChatLoop_05_chat_loop_helper_paths_test

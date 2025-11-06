@@ -7,60 +7,68 @@ from common.chat.chat_loop import run as chat_run
 
 """
 === T05-05 : ChatLoop Helper Paths ===
-狙い：
-- これまで patch していた “ヘルパー関数本体” を敢えて patch せずに実行経路を通す。
-- 未到達だった行（policy 抽出 / APIキー解決 / provider→chat_fn 解決）をカバーする。
+狙い（実装に追従）:
+- chat_loop 側の “ヘルパー実装” 名称に合わせて patch 対象を更新
+  * _extract_chat_policy_from_sessions : セッションから policy を集約
+  * _resolve_api_key                  : ユーザー→サーバーの順でAPIキー解決
+  * _get_provider_chat_fn             : provider から実際のチャット関数を解決
+- ヘルパー間の配線（policy選択 → APIキー解決 → provider関数呼び出し）を素直に通す
+- 実在しない ai.* モジュールには触れないよう、_get_provider_chat_fn だけはテスト内で差し替え
 """
 
 class ChatLoopHelperPathsTest(unittest.TestCase):
     maxDiff = None
 
-    def test_01_policy_via_auth_resolve_and_chat_core_called(self):
+    def test_01_policy_via_sessions_and_chat_core_called(self):
         """
-        [T05-05-01] auth.resolve から policy を取得し、_get_provider_chat_fn が
-        chat_core.send_once を解決して呼び出すまでの実配線を確認
-        - ヘルパーは patch しない
-        - 明示 model を渡さない（policy の model が使用されるルート）
+        [T05-05-01] セッション由来の policy（model=m-from-policy）を用い、
+        _resolve_api_key が呼ばれ(K)を返し、_get_provider_chat_fn が返す関数経由で
+        実行できることを確認。model は「明示指定なし→policyのmodel」を使うルート。
         """
-        async def fake_send_once(context_list, api_key, model, **kw):
-            # chat_core 側の send_once が実際に呼ばれたことを確認するための簡易モック
+        async def fake_provider_chat(context_list, api_key, model, **kw):
+            # 経路・値の検証
             self.assertEqual(context_list, ["hi"])
             self.assertEqual(api_key, "K")
             self.assertEqual(model, "m-from-policy")
+            # policy の余剰パラメータ（provider/model以外）が extra として渡ることも確認可能
+            self.assertEqual(kw.get("temperature"), 0.3)
             return "ok"
 
-        with patch("common.chat.chat_loop._resolve_policy",
-                   return_value={"provider": "openai", "model": "m-from-policy"}), \
-             patch("common.chat.chat_core.send_once", new=fake_send_once):
+        with patch("common.chat.chat_loop._extract_chat_policy_from_sessions",
+                   return_value={"provider": "openai", "model": "m-from-policy", "temperature": 0.3}), \
+             patch("common.chat.chat_loop._resolve_api_key", return_value="K"), \
+             patch("common.chat.chat_loop._get_provider_chat_fn", return_value=fake_provider_chat):
             out = asyncio.run(chat_run(
-                provider="openai",               # provider 正規化もヘルパー側で通る
+                provider="openai",
                 context_list=["hi"],
                 user_id=123, guild_id=456,
-                model=None,                      # 明示モデルなし → policy の model を利用
-                api_key="K"                      # _resolve_api_key は明示キー優先の分岐を通る
+                model=None  # 明示モデルなし → policy の model を利用
             ))
         self.assertEqual(out, "ok")
 
-    def test_02_helper_builds_chat_fn_without_chat_fn_in_policy(self):
+    def test_02_helper_builds_chat_fn_with_explicit_model_override(self):
         """
-        [T05-05-02] policy に chat_fn が含まれない通常形で、_get_provider_chat_fn が
-        provider に応じた関数を生成し、chat_core.send_once を呼ぶ経路を確認
+        [T05-05-02] 明示 model が policy の model を上書きする経路。
+        provider の正規化や extra パラメータの受け渡しも通ることを確認。
         """
-        async def fake_send_once(context_list, api_key, model, **kw):
+        async def fake_provider_chat(context_list, api_key, model, **kw):
             self.assertEqual(context_list, ["pong"])
             self.assertEqual(api_key, "KEY-2")
-            self.assertEqual(model, "mm")
+            # 明示 model が policy の model を上書きする想定
+            self.assertEqual(model, "mm-explicit")
+            # policy 側の余剰パラメータが extra として渡る
+            self.assertEqual(kw.get("top_p"), 0.7)
             return "ok-2"
 
-        with patch("common.chat.chat_loop._resolve_policy",
-                   return_value={"provider": "OPENAI", "model": "mm"}), \
-             patch("common.chat.chat_core.send_once", new=fake_send_once):
+        with patch("common.chat.chat_loop._extract_chat_policy_from_sessions",
+                   return_value={"provider": "OPENAI", "model": "mm-policy", "top_p": 0.7}), \
+             patch("common.chat.chat_loop._resolve_api_key", return_value="KEY-2"), \
+             patch("common.chat.chat_loop._get_provider_chat_fn", return_value=fake_provider_chat):
             out = asyncio.run(chat_run(
-                provider=" openai ",             # trim/upper の正規化も通る
+                provider=" openai ",   # trim/upper 正規化も chat_loop 内で通る
                 context_list=["pong"],
                 user_id=1, guild_id=2,
-                model="mm",                      # 明示モデルあり → こちらが優先
-                api_key="KEY-2"                  # 明示キーで _resolve_api_key が通る
+                model="mm-explicit"    # 明示モデル優先
             ))
         self.assertEqual(out, "ok-2")
 
@@ -68,7 +76,7 @@ class ChatLoopHelperPathsTest(unittest.TestCase):
 if __name__ == "__main__":
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ChatLoopHelperPathsTest)
     mapping = {
-        "test_01_policy_via_auth_resolve_and_chat_core_called": ("T05-05-01", "policy via auth.resolve → chat_core called"),
-        "test_02_helper_builds_chat_fn_without_chat_fn_in_policy": ("T05-05-02", "helper builds chat_fn (no chat_fn in policy)"),
+        "test_01_policy_via_sessions_and_chat_core_called": ("T05-05-01", "policy via sessions → provider chat called"),
+        "test_02_helper_builds_chat_fn_with_explicit_model_override": ("T05-05-02", "explicit model overrides policy; extra passthrough"),
     }
     run_unittest_suite("T05-05", suite, mapping)
