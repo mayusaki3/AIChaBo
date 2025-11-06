@@ -58,12 +58,47 @@ class ChatCoreBasicTest(unittest.TestCase):
         except Exception:
             self.skipTest("モック差し替え未整備のため Skip")
 
+    def test_04_guard_non_str_input(self):
+        """guard(non-str): text=None で ValueError を投げる枝を到達"""
+        from common.chat.chat_core import send_once
+        with self.assertRaises(ValueError):
+            send_once(text=None, context={"provider":"openai","model":"m"})
+
+    def test_05_echo_without_chat_fn(self):
+        """echo 分岐: chat_fn を渡さない場合は trim 済みの文字列をそのまま返す"""
+        from common.chat.chat_core import send_once
+        out = send_once(text="  ping  ", context={"provider":"openai","model":"m"})
+        self.assertEqual(out, "ping")
+
+    def test_06_chat_fn_injection_is_called(self):
+        """chat_fn 注入分岐: 注入された関数が呼ばれ、provider/model が渡される"""
+        from common.chat.chat_core import send_once
+        called = {}
+        def fake_chat_fn(*, text, provider, model):
+            # 呼び出し時の引数を記録し、戻り値を返す
+            called["text"] = text
+            called["provider"] = provider
+            called["model"] = model
+            return f"ok:{provider}:{model}:{text}"
+        out = send_once(
+            text="pong",
+           context={"provider": "openai", "model": "gpt-4o-mini"},
+            chat_fn=fake_chat_fn,
+        )
+        self.assertEqual(out, "ok:openai:gpt-4o-mini:pong")
+        self.assertEqual(called, {
+            "text": "pong", "provider": "openai", "model": "gpt-4o-mini"
+        })
+
 
 if __name__ == "__main__":
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ChatCoreBasicTest)
     mapping = {
-        "test_01_guard_empty_text":        ("T04-01-01", "guard(empty)"),
-        "test_02_require_provider_model":  ("T04-01-02", "require provider/model"),
+        "test_01_guard_empty_text":          ("T04-01-01", "guard(empty)"),
+        "test_02_require_provider_model":    ("T04-01-02", "require provider/model"),
         "test_03_basic_roundtrip_with_mock": ("T04-01-03", "roundtrip with mock (minimal)"),
+        "test_04_guard_non_str_input":       ("T04-01-04", "guard(non-str)"),
+        "test_05_echo_without_chat_fn":      ("T04-01-05", "echo without chat_fn"),
+        "test_06_chat_fn_injection_is_called": ("T04-01-06", "chat_fn injection is called"),
     }
     run_unittest_suite("T04-01", suite, mapping)

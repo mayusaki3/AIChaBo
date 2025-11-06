@@ -49,6 +49,9 @@ htmlcov/index.html
 | **T03-01** | Auth 解決（opt-in） | resolve empty | `common/chat/auth.py` |
 | **T04-01** | ChatCore モック LLM | provider echo | `ui/discord/services/chat_core.py` |
 | **T05-01** | ChatLoop MOCK | minimal run / provider echo | `common/chat/chat_loop.py` |
+| **T05-02** | ChatLoop Edges | 明示model優先 / policy追加パラメータ透過 / 例外ハンドリング（provider例外→既定メッセージ） | `common/chat/chat_loop.py` |
+| **T05-03** | ChatLoop More Edges | APIキー未設定 / 全メッセージ空白化 / policy=None→既定メッセージ / プロバイダ空文字返却 / プロバイダ関数None→既定メッセージ | `common/chat/chat_loop.py` |
+| **T05-04** | ChatLoop Cover Rest | provider前後空白・大文字許容 / policy={}＋明示model / プロバイダがNone返却→既定メッセージ | `common/chat/chat_loop.py` |
 | **T06-01** | Message 最小経路 | run_once_for_test | `common/chat/message.py` |
 | **T07-01** | Context（SKIP） | future ctx build | `message.build_context()` |
 
@@ -217,9 +220,12 @@ Remove-Item Env:AIChaBo_TEST_ENABLE_AUTH_RESOLVE
 
 | 番号 | 目的 | 検証内容 | モジュール |
 |---|---|---|---|
-| **T04-01-01** | 入力ガード | text="   " を例外またはガードで弾く（どちらでも可） | `common/chat/chat_core.py` |
+| **T04-01-01** | 入力ガード | text="   " を例外またはガードで弾く | `common/chat/chat_core.py` |
 | **T04-01-02** | 必須項目 | context.chat.provider / context.chat.model 欠落で ValueError | `common/chat/chat_core.py` |
-| **T04-01-03** | 最小往復 | chat_fn 未指定なら echo 返却、chat_fn 指定時は委譲 | `common/chat/chat_core.py` |
+| **T04-01-03** | 最小往復 | chat_fn 未指定なら echo、chat_fn 指定時は委譲 | `common/chat/chat_core.py` |
+| **T04-01-04** | 入力ガード（型） | text=None で ValueError（非文字列分岐の到達） | `common/chat/chat_core.py` |
+| **T04-01-05** | echo 分岐 | chat_fn 無し → trim 後にそのまま返す | `common/chat/chat_core.py` |
+| **T04-01-06** | chat_fn 注入 | `send_once(..., chat_fn=...)` で注入関数が呼ばれ、`provider/model/text` が正しく引数で渡ることを検証 | `common/chat/chat_core.py` |
 
 ```bash
 python -m utiltests.T04_ChatCore_01_chat_core_test
@@ -238,6 +244,50 @@ python -m utiltests.T04_ChatCore_01_chat_core_test
 
 ```bash
 python -m utiltests.T05_ChatLoop_01_chat_loop_test
+```
+
+---
+
+### T05-02 : ChatLoop Edges
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T05-02-01** | 明示 model の優先 | policy の model より引数 model を優先（fake_call に渡る model を検証） | `common/chat/chat_loop.py` |
+| **T05-02-02** | 追加パラメータ透過 | policy の temperature/top_p などがプロバイダ関数に **extra** として渡る | `common/chat/chat_loop.py` |
+| **T05-02-03** | 例外ハンドリング | プロバイダ関数が例外を投げたら `"（チャット実行でエラーが発生しました）"` を返す | `common/chat/chat_loop.py` |
+
+```bash
+python -m utiltests.T05_ChatLoop_02_chat_loop_edges_test
+```
+
+---
+
+### T05-03 : ChatLoop More Edges
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T05-03-01** | APIキー未設定 | `_resolve_api_key` が None/空 → 既定メッセージ | `common/chat/chat_loop.py` |
+| **T05-03-02** | 全メッセージ空白化 | `context_list=["  ","\t"," \n "]` → 空入力メッセージ | `common/chat/chat_loop.py` |
+| **T05-03-03** | policy=None | policy=None は現行実装上エラー → 既定メッセージ応答 | `common/chat/chat_loop.py` |
+| **T05-03-04** | 空文字返却 | provider 関数が `""` を返す枝（戻り値型の許容確認） | `common/chat/chat_loop.py` |
+| **T05-03-05** | 関数取得失敗 | `_get_provider_chat_fn` が `None` → 例外ハンドリング文言 | `common/chat/chat_loop.py` |
+
+```bash
+python -m utiltests.T05_ChatLoop_03_chat_loop_more_edges_test
+```
+
+---
+
+### T05-04 : ChatLoop Cover Rest
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T05-04-01** | provider 前処理 | `provider="  OPENAI  "` を許容（前後空白/大文字） | `common/chat/chat_loop.py` |
+| **T05-04-02** | policy 空辞書 | `policy={}` かつ `model="explicit"` で正常完了 | `common/chat/chat_loop.py` |
+| **T05-04-03** | 戻り値後処理 | プロバイダが `None` を返す枝 → 既定メッセージ | `common/chat/chat_loop.py` |
+
+```bash
+python -m utiltests.T05_ChatLoop_04_chat_loop_cover_rest_test
 ```
 
 ---
