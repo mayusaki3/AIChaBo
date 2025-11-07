@@ -6,7 +6,7 @@ T02-01 SecretStore 基本動作 & 競合整合性テスト
   - 複数スレッドの同時 put が発生しても provider 単位で LWW（Last-Write-Wins）
     となり、部分破損が起きない（混在が残らない）
 実行例:
-  python -m utiltests.T02_SecretStore_01_store_test
+  python -m tests.T02_SecretStore_01_store_test
 出力:
   ✅/❌ と [T02-01-xx] を先頭に持つ行 + SUMMARY（共通レポータ）
 注意:
@@ -24,7 +24,7 @@ import unittest
 from pathlib import Path
 from typing import Dict, Any
 
-from utiltests._report import _Reporter as Reporter  # コンテキスト毎に ✅/❌ を出す軽量レポータ
+from tests._report import _Reporter as Reporter  # コンテキスト毎に ✅/❌ を出す軽量レポータ
 import common.secret.store as store_mod
 
 

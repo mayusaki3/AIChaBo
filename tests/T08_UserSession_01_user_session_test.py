@@ -1,4 +1,4 @@
-# utiltests/T08_UserSession_01_user_session_test.py
+# tests/T08_UserSession_01_user_session_test.py
 # ------------------------------------------------------------
 # T08-01 : UserSession 管理（USM）
 # 目的:
@@ -7,11 +7,11 @@
 # 出力:
 #  - ✅/❌ と --- SUMMARY T08-01: ... --- を Reporter で統一
 # 実行:
-#  - python -m utiltests.T08_UserSession_01_user_session_test
+#  - python -m tests.T08_UserSession_01_user_session_test
 # ------------------------------------------------------------
 import json, shutil, tempfile, unittest
 from pathlib import Path
-from utiltests._report import _Reporter as Reporter
+from tests._report import _Reporter as Reporter
 
 # 対象
 from common.session import user_session_manager as usm_mod

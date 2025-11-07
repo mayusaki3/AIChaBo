@@ -1,4 +1,4 @@
-# utiltests/T02_SecretStore_02_store_edge_test.py
+# tests/T02_SecretStore_02_store_edge_test.py
 # ------------------------------------------------------------
 # T02-02 : SecretStore edges & recovery
 # 目的:
@@ -18,7 +18,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from utiltests._report import _Reporter as Reporter
+from tests._report import _Reporter as Reporter
 
 # テスト対象
 from common.secret.store import store, USERS_JSON, SERVERS_JSON, MASTER_KEY_PATH

@@ -1,4 +1,4 @@
-# utiltests/T05_ChatLoop_01_chat_loop_test.py
+# tests/T05_ChatLoop_01_chat_loop_test.py
 # ------------------------------------------------------------
 # T05-01 : ChatLoop 基本
 # 対象: common/chat/chat_loop.py の async run()
@@ -10,14 +10,14 @@
 # 依存:
 #  - USM/SSM/SecretStore/AI 実体には依存させず、内部ヘルパを patch して検証
 # 実行:
-#  - python -m utiltests.T05_ChatLoop_01_chat_loop_test
+#  - python -m tests.T05_ChatLoop_01_chat_loop_test
 # 出力:
 #  - ✅/❌ [T05-01-xx] ... と --- SUMMARY T05-01: ... --- を共通レポータで統一
 # ------------------------------------------------------------
 import asyncio
 import unittest
 from unittest.mock import patch
-from utiltests._report import run_unittest_suite
+from tests._report import run_unittest_suite
 
 # テスト対象: async run()
 from common.chat.chat_loop import run as chat_run

@@ -1,4 +1,4 @@
-# utiltests/T05_ChatLoop_02_chat_loop_edges_test.py
+# tests/T05_ChatLoop_02_chat_loop_edges_test.py
 # ------------------------------------------------------------
 # T05-02 : ChatLoop edges
 # 目的:
@@ -6,12 +6,12 @@
 #  - policy の追加パラメータ(temperature 等)がプロバイダ関数に透過されること
 #  - 例外発生時に既定メッセージ "（チャット実行でエラーが発生しました）" を返すこと
 # 実装依存はモックで吸収（USM/SSM/SecretStore/プロバイダ呼び出し）
-# 実行: python -m utiltests.T05_ChatLoop_02_chat_loop_edges_test
+# 実行: python -m tests.T05_ChatLoop_02_chat_loop_edges_test
 # ------------------------------------------------------------
 import asyncio
 import unittest
 from unittest.mock import patch
-from utiltests._report import run_unittest_suite
+from tests._report import run_unittest_suite
 
 from common.chat.chat_loop import run as chat_run
 

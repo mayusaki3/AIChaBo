@@ -5,14 +5,14 @@ T01-01 Provider 正規化・表示名テスト
   - provider 名の正規化 (normalize) と表示名変換 (display) が
     既知/未知/空入力の各パスで正しく動作することを確認する。
 実行例:
-  python -m utiltests.T01_Provider_01_provider_test
+  python -m tests.T01_Provider_01_provider_test
 出力:
   ✅/❌ と [T01-01-xx] を先頭に持つ行 + SUMMARY（共通レポータ）
 """
 
 import unittest
 
-from utiltests._report import run_unittest_suite  # 共通の結果レポータ
+from tests._report import run_unittest_suite  # 共通の結果レポータ
 from common.chat.provider import (
     normalize_provider,  # 入力 → 正規化ID（小文字, 既知エイリアスは canonical へ）
     display_provider,    # 正規化ID → 表示名（例: "openai" → "OpenAI"）

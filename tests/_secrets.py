@@ -1,4 +1,4 @@
-# utiltests/_secrets.py
+# tests/_secrets.py
 # コメント: .envtest を読み込み、見つかった鍵だけシード。無い場合はモック実行へフォールバック。
 import os
 from pathlib import Path

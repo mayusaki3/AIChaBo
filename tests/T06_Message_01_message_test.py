@@ -2,10 +2,10 @@
 """
 T06_Message_01_message_test.py
 目的: Discord を介さず共通層 message.run_once_for_test() の最小経路を検証
-実行例: python -m utiltests.T06_Message_01_message_test
+実行例: python -m tests.T06_Message_01_message_test
 """
 import asyncio
-from utiltests._report import make_reporter
+from tests._report import make_reporter
 from common.chat.message import run_once_for_test
 
 async def _one():

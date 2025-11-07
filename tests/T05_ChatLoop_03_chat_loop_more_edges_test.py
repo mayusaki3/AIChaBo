@@ -5,11 +5,11 @@
 #  - policy None/空辞書枝
 #  - provider 関数が空文字返却
 #  - provider 関数取得失敗(None) → 例外ハンドリング枝
-# 実行: python -m utiltests.T05_ChatLoop_03_chat_loop_more_edges_test
+# 実行: python -m tests.T05_ChatLoop_03_chat_loop_more_edges_test
 import asyncio
 import unittest
 from unittest.mock import patch
-from utiltests._report import run_unittest_suite
+from tests._report import run_unittest_suite
 
 from common.chat.chat_loop import run as chat_run
 

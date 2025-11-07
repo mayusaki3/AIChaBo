@@ -1,11 +1,11 @@
 # T05-04 : ChatLoop cover rest branches
 # 狙い: chat_loop.py の未到達(14–27, 34–43, 51–59, 101)をコード変更なしでテスト到達
-# 実行: python -m utiltests.T05_ChatLoop_04_chat_loop_cover_rest_test
+# 実行: python -m tests.T05_ChatLoop_04_chat_loop_cover_rest_test
 
 import asyncio
 import unittest
 from unittest.mock import patch
-from utiltests._report import run_unittest_suite
+from tests._report import run_unittest_suite
 
 # 被テスト対象
 from common.chat.chat_loop import run as chat_run
@@ -98,5 +98,5 @@ if __name__ == "__main__":
         "test_02_policy_empty_dict_with_explicit_model":   ("T05-04-02", "policy {} + explicit model"),
         "test_03_provider_returns_none_is_stringified":    ("T05-04-03", 'provider returns None -> "None" string'),
     }
-    from utiltests._report import run_unittest_suite
+    from tests._report import run_unittest_suite
     run_unittest_suite("T05-04", suite, mapping)

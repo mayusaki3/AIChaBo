@@ -7,21 +7,21 @@ CI 実行を想定し、書き込みを伴うテストは **既定で skip / dry
 ```shell
 pip install -r requirements-dev.txt
 ```
-各テストは「python -m utiltests.*」で実行しますが、以下の形式で実行すると、テストのカバー率が確認できます。
+各テストは「python -m tests.*」で実行しますが、以下の形式で実行すると、テストのカバー率が確認できます。
 ```shell
 # テスト実行（通常実行）
-python -m utiltests.T01_Provider_01_provider_test
+python -m tests.T01_Provider_01_provider_test
 
 # テスト実行（カバー率確認：単一）
-coverage run -m utiltests.T01_Provider_01_provider_test
+coverage run -m tests.T01_Provider_01_provider_test
 
 # テスト実行（カバー率確認：全体）
-coverage run -m unittest discover -s utiltests -p "*_test.py"
+coverage run -m unittest discover -s tests -p "*_test.py"
 
 # テスト実行（カバー率確認：全体・結果を累積）
 coverage erase
-coverage run -a -m utiltests.T01_Provider_01_provider_test
-coverage run -a -m utiltests.T02_SecretStore_01_store_test
+coverage run -a -m tests.T01_Provider_01_provider_test
+coverage run -a -m tests.T02_SecretStore_01_store_test
 #    :             以下、残りのテストを実施
 
 # カバー率レポート表示
@@ -53,6 +53,8 @@ htmlcov/index.html
 | **T05-03** | ChatLoop More Edges | APIキー未設定 / 全メッセージ空白化 / policy=None→既定メッセージ / プロバイダ空文字返却 / プロバイダ関数None→既定メッセージ | `common/chat/chat_loop.py` |
 | **T05-04** | ChatLoop Cover Rest | provider前後空白・大文字許容 / policy={}＋明示model / プロバイダがNone返却→既定メッセージ | `common/chat/chat_loop.py` |
 | **T05-05** | ChatLoop Helper Paths | セッション由来policy→APIキー解決→provider関数呼出の配線を通す（明示model有無パス／extra透過） | `common/chat/chat_loop.py` |
+| **T05-06** | ChatLoop メッセージ正規化 & 直呼び | 文字列→`[{role,content}]` 正規化／既存配列の透過／`policy.chat_fn` 直呼び | `common/chat/chat_loop.py` |
+| **T05-07** | ChatLoop Helpers | セッション方針解決 / APIキー解決 / provider関数解決ヘルパの分岐網羅（ユーザー優先マージ / user→server優先度 / ai.\{provider\} エントリポイント解決） | `common/chat/chat_loop.py` |
 | **T06-01** | Message 最小経路 | run_once_for_test | `common/chat/message.py` |
 | **T07-01** | Context（SKIP） | future ctx build | `message.build_context()` |
 
@@ -93,7 +95,7 @@ USM / SSM / SecretStore に**テスト用認証情報**を流し込むユーテ�
 #### 実行
 
 ```bash
-python -m utiltests.T01_Provider_01_provider_test
+python -m tests.T01_Provider_01_provider_test
 ```
 
 ---
@@ -112,7 +114,7 @@ python -m utiltests.T01_Provider_01_provider_test
 #### 実行
 
 ```bash
-python -m utiltests.T02_SecretStore_01_store_test
+python -m tests.T02_SecretStore_01_store_test
 ```
 
 ---
@@ -135,7 +137,7 @@ python -m utiltests.T02_SecretStore_01_store_test
 
 #### 実行
 ```bash
-python -m utiltests.T02_SecretStore_02_store_edge_test
+python -m tests.T02_SecretStore_02_store_edge_test
 ```
 
 ---
@@ -155,7 +157,7 @@ python -m utiltests.T02_SecretStore_02_store_edge_test
 
 #### 実行
 ```bash
-python -m utiltests.T02_SecretStore_03_store_init_test
+python -m tests.T02_SecretStore_03_store_init_test
 ```
 
 ---
@@ -180,7 +182,7 @@ python -m utiltests.T02_SecretStore_03_store_init_test
 
 #### 実行
 ```bash
-python -m utiltests.T02_SecretStore_04_store_misc_test
+python -m tests.T02_SecretStore_04_store_misc_test
 ```
 
 ---
@@ -206,12 +208,12 @@ python -m utiltests.T02_SecretStore_04_store_misc_test
 ```bash
 # bash/zsh
 export AIChaBo_TEST_ENABLE_AUTH_RESOLVE=1
-python -m utiltests.T03_Auth_01_auth_resolve_test
+python -m tests.T03_Auth_01_auth_resolve_test
 unset AIChaBo_TEST_ENABLE_AUTH_RESOLVE
 
 # PowerShell
 $env:AIChaBo_TEST_ENABLE_AUTH_RESOLVE=1
-python -m utiltests.T03_Auth_01_auth_resolve_test
+python -m tests.T03_Auth_01_auth_resolve_test
 Remove-Item Env:AIChaBo_TEST_ENABLE_AUTH_RESOLVE
 ```
 
@@ -229,7 +231,7 @@ Remove-Item Env:AIChaBo_TEST_ENABLE_AUTH_RESOLVE
 | **T04-01-06** | chat_fn 注入 | `send_once(..., chat_fn=...)` で注入関数が呼ばれ、`provider/model/text` が正しく引数で渡ることを検証 | `common/chat/chat_core.py` |
 
 ```bash
-python -m utiltests.T04_ChatCore_01_chat_core_test
+python -m tests.T04_ChatCore_01_chat_core_test
 ```
 
 ---
@@ -244,7 +246,7 @@ python -m utiltests.T04_ChatCore_01_chat_core_test
 | **T05-01-04** | provider ガード | provider="   " → （プロバイダが不正です）を返す | `common/chat/chat_loop.py` |
 
 ```bash
-python -m utiltests.T05_ChatLoop_01_chat_loop_test
+python -m tests.T05_ChatLoop_01_chat_loop_test
 ```
 
 ---
@@ -258,7 +260,7 @@ python -m utiltests.T05_ChatLoop_01_chat_loop_test
 | **T05-02-03** | 例外ハンドリング | プロバイダ関数が例外を投げたら `"（チャット実行でエラーが発生しました）"` を返す | `common/chat/chat_loop.py` |
 
 ```bash
-python -m utiltests.T05_ChatLoop_02_chat_loop_edges_test
+python -m tests.T05_ChatLoop_02_chat_loop_edges_test
 ```
 
 ---
@@ -274,7 +276,7 @@ python -m utiltests.T05_ChatLoop_02_chat_loop_edges_test
 | **T05-03-05** | 関数取得失敗 | `_get_provider_chat_fn` が `None` → 例外ハンドリング文言 | `common/chat/chat_loop.py` |
 
 ```bash
-python -m utiltests.T05_ChatLoop_03_chat_loop_more_edges_test
+python -m tests.T05_ChatLoop_03_chat_loop_more_edges_test
 ```
 
 ---
@@ -288,7 +290,7 @@ python -m utiltests.T05_ChatLoop_03_chat_loop_more_edges_test
 | **T05-04-03** | ChatLoop cover rest | provider returns None → `"None"`（stringify 挙動を検証） | `common/chat/chat_loop.py` |
 
 ```bash
-python -m utiltests.T05_ChatLoop_04_chat_loop_cover_rest_test
+python -m tests.T05_ChatLoop_04_chat_loop_cover_rest_test
 ```
 
 ---
@@ -302,7 +304,36 @@ python -m utiltests.T05_ChatLoop_04_chat_loop_cover_rest_test
 
 
 ```bash
-python -m utiltests.T05_ChatLoop_05_chat_loop_helper_paths_test
+python -m tests.T05_ChatLoop_05_chat_loop_helper_paths_test
+```
+
+---
+
+### T05-06 : ChatLoop メッセージ正規化 & 直呼びパス網羅
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+ **T05-06-01** | ChatLoop paths cover | message を文字列で与えた場合に `{'role':'user'}` へ正規化される | `common/chat/chat_loop.py` |
+| **T05-06-02** | ChatLoop paths cover | 既に `[{role, content}]` 形式の配列はそのまま通過する | `common/chat/chat_loop.py` |
+| **T05-06-03** | ChatLoop paths cover | `policy.chat_fn` 指定時に provider マップをバイパスして直呼びされる | `common/chat/chat_loop.py` |
+
+```bash
+python -m tests.T05_ChatLoop_06_chat_loop_paths_cover_test
+```
+
+---
+
+### T05-07 : ChatLoop Helper
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T05-07-01** | セッション方針マージ | `_extract_chat_policy_from_sessions` が SSM/USM の非機密ポリシーを統合し、ユーザー側設定でサーバ側を上書きする | `common/chat/chat_loop.py` |
+| **T05-07-02** | APIキー解決優先度 | `_resolve_api_key` が user キー → server キー → 未設定(None) の順で解決する | `common/chat/chat_loop.py` |
+| **T05-07-03** | provider関数解決(成功) | `_get_provider_chat_fn` が `ai.{provider}.{provider}_api` から `call_{provider}_chat` を取得して返す | `common/chat/chat_loop.py` |
+| **T05-07-04** | provider関数解決(失敗) | `_get_provider_chat_fn` がエントリポイント不在時に `RuntimeError` を送出する | `common/chat/chat_loop.py` |
+
+```bash
+python -m tests.T05_ChatLoop_07_chat_loop_helpers_test
 ```
 
 ---
@@ -314,7 +345,7 @@ python -m utiltests.T05_ChatLoop_05_chat_loop_helper_paths_test
 | **T06-01-01** | 最小実行パス | run_once_for_test 経路通過 | `common/chat/message.py` |
 
 ```bash
-python -m utiltests.T06_Message_01_message_test
+python -m tests.T06_Message_01_message_test
 ```
 
 ---
@@ -326,7 +357,7 @@ python -m utiltests.T06_Message_01_message_test
 | **T07-01-01** | 将来拡張 | skeleton（SKIP） | `message.build_context()` |
 
 ```bash
-python -m utiltests.T07_Context_01_context_test
+python -m tests.T07_Context_01_context_test
 ```
 
 ---

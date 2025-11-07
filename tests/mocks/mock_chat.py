@@ -1,4 +1,4 @@
-# utiltests/mocks/mock_chat.py
+# tests/mocks/mock_chat.py
 from typing import List
 
 async def mock_chat(provider: str, context_list: List[str]) -> str:

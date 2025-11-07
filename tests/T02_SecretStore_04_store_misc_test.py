@@ -1,4 +1,4 @@
-# utiltests/T02_SecretStore_04_store_misc_test.py
+# tests/T02_SecretStore_04_store_misc_test.py
 # ------------------------------------------------------------
 # T02-04 : SecretStore misc branches (fill remaining holes)
 # カバー目的：
@@ -19,7 +19,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from utiltests._report import _Reporter as Reporter
+from tests._report import _Reporter as Reporter
 import common.secret.store as mod
 
 rep = Reporter("T02-04 SecretStore misc branches")

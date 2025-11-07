@@ -1,4 +1,4 @@
-# utiltests/T02_SecretStore_03_store_init_test.py
+# tests/T02_SecretStore_03_store_init_test.py
 # ------------------------------------------------------------
 # T02-03 : SecretStore init / key-gen / error paths
 # 目的:
@@ -22,7 +22,7 @@ import unittest
 import importlib
 from pathlib import Path
 
-from utiltests._report import _Reporter as Reporter
+from tests._report import _Reporter as Reporter
 
 import common.secret.store as mod  # モジュール参照（定数を差し替えるため）
 

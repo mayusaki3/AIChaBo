@@ -1,4 +1,4 @@
-# utiltests/T04_ChatCore_01_chat_core_test.py
+# tests/T04_ChatCore_01_chat_core_test.py
 # ------------------------------------------------------------
 # T04-01 : ChatCore 基本
 # 目的:
@@ -6,12 +6,12 @@
 # 出力:
 #  - ✅/❌ [T04-01-xx] ... と --- SUMMARY T04-01: ... --- を共通レポータで統一
 # 実行:
-#  - python -m utiltests.T04_ChatCore_01_chat_core_test
+#  - python -m tests.T04_ChatCore_01_chat_core_test
 # ------------------------------------------------------------
 import unittest
 
 # 共通レポータ（unittest 要約を抑止して ✅/❌ + SUMMARY を出す）
-from utiltests._report import run_unittest_suite
+from tests._report import run_unittest_suite
 
 # テスト対象: chat_core（実体に合わせて import できない場合は Skip）
 try:

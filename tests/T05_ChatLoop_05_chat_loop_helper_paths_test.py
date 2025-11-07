@@ -1,8 +1,8 @@
-# utiltests/T05_ChatLoop_05_chat_loop_helper_paths_test.py
+# tests/T05_ChatLoop_05_chat_loop_helper_paths_test.py
 import unittest
 import asyncio
 from unittest.mock import patch
-from utiltests._report import run_unittest_suite
+from tests._report import run_unittest_suite
 from common.chat.chat_loop import run as chat_run
 
 """

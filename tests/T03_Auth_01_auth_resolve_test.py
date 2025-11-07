@@ -5,12 +5,12 @@ T03_Auth_01_auth_resolve_test.py
 実行例:
   # bash/zsh
   export AIChaBo_TEST_ENABLE_AUTH_RESOLVE=1
-  python -m utiltests.T03_Auth_01_auth_resolve_test
+  python -m tests.T03_Auth_01_auth_resolve_test
   unset AIChaBo_TEST_ENABLE_AUTH_RESOLVE
 
   # PowerShell
   $env:AIChaBo_TEST_ENABLE_AUTH_RESOLVE=1
-  python -m utiltests.T03_Auth_01_auth_resolve_test
+  python -m tests.T03_Auth_01_auth_resolve_test
   Remove-Item Env:AIChaBo_TEST_ENABLE_AUTH_RESOLVE
 """
 import os
@@ -19,7 +19,7 @@ from typing import Dict, Any
 
 # 対象関数と、その内部で参照する USM/SSM/store を直接モンキーパッチする
 from common.chat import auth as AUTH_MOD
-from utiltests._report import run_unittest_suite
+from tests._report import run_unittest_suite
 
 resolve_auth_and_key = AUTH_MOD.resolve_auth_and_key
 
