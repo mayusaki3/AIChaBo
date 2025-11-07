@@ -7,7 +7,7 @@ branch = True
 #    utiltests
 omit =
     */__init__.py
-    utiltests/*
+    tests/*
     */site-packages/*
     # 必要に応じてさらに除外:
     # ui/discord/*

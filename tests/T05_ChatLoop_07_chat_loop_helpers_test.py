@@ -8,19 +8,8 @@ T05-07 : ChatLoop helper functions
   - common.chat.chat_loop._get_provider_chat_fn
 
 目的:
-  - T05-01〜06 でモックしていた内部ヘルパの分岐ロジックを直接テストし、chat_loop.py のカバレッジを向上させる。
+  - T05-01〜06でモックしていた内部ヘルパの分岐ロジックを直接テストし、chat_loop.py のカバレッジを 100% に近づける。
   - 外部依存（USM/SSM/SecretStore/ai.*）は unittest.mock により差し替え、安全なユニットテストとする。
-
-前提(実装準拠):
-  - _extract_chat_policy_from_sessions(user_id, guild_id)
-      USM/SSM の get_all_non_secret_policy を用い、
-      server_policy をベースに user_policy で上書き（ユーザー優先）して dict を返す。
-  - _resolve_api_key(user_id, guild_id, provider)
-      store.get_user_key(user_id, provider) → store.get_server_key(guild_id, provider) の順で探索。
-      見つからなければ None。
-  - _get_provider_chat_fn(provider)
-      importlib.import_module(f"ai.{provider}.{provider}_api") を行い、
-      call_{provider}_chat を取得して返す。無ければ RuntimeError。
 """
 
 import types
@@ -48,14 +37,16 @@ class ChatLoopHelpersTest(unittest.TestCase):
             get_all_non_secret_policy=lambda uid: {"model": "user-model", "temp": 0.2}
         )
 
-        # chat_loop モジュール内で参照される USM/SSM を差し替え
         with patch.object(chat_loop, "SSM", fake_ssm), \
              patch.object(chat_loop, "USM", fake_usm):
             policy = chat_loop._extract_chat_policy_from_sessions(user_id=1, guild_id=2)
 
-        self.assertEqual(policy.get("model"), "user-model")  # user が上書き
-        self.assertEqual(policy.get("top_p"), 0.9)           # server の値を保持
-        self.assertEqual(policy.get("temp"), 0.2)            # user のみの値を反映
+        # user が model を上書き
+        self.assertEqual(policy.get("model"), "user-model")
+        # server の項目も保持
+        self.assertEqual(policy.get("top_p"), 0.9)
+        # user の追加項目も反映
+        self.assertEqual(policy.get("temp"), 0.2)
 
     # [T05-07-02]
     # _resolve_api_key:
@@ -70,22 +61,23 @@ class ChatLoopHelpersTest(unittest.TestCase):
             key = chat_loop._resolve_api_key(user_id=1, guild_id=2, provider="openai")
             self.assertEqual(key, "USER_KEY")
 
-        # case-2: user 無し → server
+        # case-2: user 無し → server（user_id=None パスも通す）
         store_mock = MagicMock()
         store_mock.get_user_key.return_value = None
         store_mock.get_server_key.return_value = "SERVER_KEY"
 
+        # user_id は None: user 分岐をスキップして server 分岐のみ通る
         with patch.object(chat_loop, "store", store_mock):
-            key = chat_loop._resolve_api_key(user_id=1, guild_id=2, provider="openai")
+            key = chat_loop._resolve_api_key(user_id=None, guild_id=2, provider="openai")
             self.assertEqual(key, "SERVER_KEY")
 
-        # case-3: どちらも無し → None
+        # case-3: どちらも無し → None（両方 None パスを通す）
         store_mock = MagicMock()
         store_mock.get_user_key.return_value = None
         store_mock.get_server_key.return_value = None
 
         with patch.object(chat_loop, "store", store_mock):
-            key = chat_loop._resolve_api_key(user_id=1, guild_id=2, provider="openai")
+            key = chat_loop._resolve_api_key(user_id=None, guild_id=None, provider="openai")
             self.assertIsNone(key)
 
     # [T05-07-03]
@@ -118,6 +110,37 @@ class ChatLoopHelpersTest(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 chat_loop._get_provider_chat_fn(provider)
 
+    # [T05-07-05]
+    # _extract_chat_policy_from_sessions:
+    #  - guild_id のみ指定された場合は SSM のみ参照し、その結果を返す
+    def test_05_extract_policy_guild_only(self):
+        fake_ssm = types.SimpleNamespace(
+            get_all_non_secret_policy=lambda gid: {"model": "server-model"}
+        )
+        fake_usm = MagicMock()
+
+        with patch.object(chat_loop, "SSM", fake_ssm), \
+             patch.object(chat_loop, "USM", fake_usm):
+            policy = chat_loop._extract_chat_policy_from_sessions(user_id=None, guild_id=2)
+
+        self.assertEqual(policy, {"model": "server-model"})
+        fake_usm.get_all_non_secret_policy.assert_not_called()
+
+    # [T05-07-06]
+    # _extract_chat_policy_from_sessions:
+    #  - user_id/guild_id ともに None の場合、USM/SSM を呼ばず {} を返す
+    def test_06_extract_policy_none_ids_returns_empty(self):
+        fake_ssm = MagicMock()
+        fake_usm = MagicMock()
+
+        with patch.object(chat_loop, "SSM", fake_ssm), \
+             patch.object(chat_loop, "USM", fake_usm):
+            policy = chat_loop._extract_chat_policy_from_sessions(user_id=None, guild_id=None)
+
+        self.assertEqual(policy, {})
+        fake_ssm.get_all_non_secret_policy.assert_not_called()
+        fake_usm.get_all_non_secret_policy.assert_not_called()
+
 
 if __name__ == "__main__":
     mapping = {
@@ -129,6 +152,10 @@ if __name__ == "__main__":
             ("T05-07-03", "_get_provider_chat_fn: uses ai.{provider}.{provider}_api.call_{provider}_chat"),
         "test_04_get_provider_chat_fn_missing_raises_runtime_error":
             ("T05-07-04", "_get_provider_chat_fn: missing entry -> RuntimeError"),
+        "test_05_extract_policy_guild_only":
+            ("T05-07-05", "_extract_chat_policy_from_sessions: guildのみ指定 -> SSMのみ"),
+        "test_06_extract_policy_none_ids_returns_empty":
+            ("T05-07-06", "_extract_chat_policy_from_sessions: user/guild無し -> {} & USM/SSM未呼び出し"),
     }
 
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ChatLoopHelpersTest)

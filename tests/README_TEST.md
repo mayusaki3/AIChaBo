@@ -327,10 +327,14 @@ python -m tests.T05_ChatLoop_06_chat_loop_paths_cover_test
 
 | 番号 | 目的 | 検証内容 | モジュール |
 |---|---|---|---|
-| **T05-07-01** | セッション方針マージ | `_extract_chat_policy_from_sessions` が SSM/USM の非機密ポリシーを統合し、ユーザー側設定でサーバ側を上書きする | `common/chat/chat_loop.py` |
-| **T05-07-02** | APIキー解決優先度 | `_resolve_api_key` が user キー → server キー → 未設定(None) の順で解決する | `common/chat/chat_loop.py` |
-| **T05-07-03** | provider関数解決(成功) | `_get_provider_chat_fn` が `ai.{provider}.{provider}_api` から `call_{provider}_chat` を取得して返す | `common/chat/chat_loop.py` |
-| **T05-07-04** | provider関数解決(失敗) | `_get_provider_chat_fn` がエントリポイント不在時に `RuntimeError` を送出する | `common/chat/chat_loop.py` |
+| **T05-07-01** | セッション方針マージ | `_extract_chat_policy_from_sessions` が server+user をマージし、ユーザー設定で上書きする | `common/chat/chat_loop.py` |
+| **T05-07-02** | APIキー解決優先度 | `_resolve_api_key` が user → server → None の優先度でキーを解決する | `common/chat/chat_loop.py` |
+| **T05-07-03** | provider関数解決(成功) | `_get_provider_chat_fn` が `ai.{provider}.{provider}_api.call_{provider}_chat` を取得して返す | `common/chat/chat_loop.py` |
+| **T05-07-04** | provider関数解決(失敗) | `_get_provider_chat_fn` がエントリ不在時に `RuntimeError` を送出する | `common/chat/chat_loop.py` |
+| **T05-07-05** | guild-only方針 | `_extract_chat_policy_from_sessions` が guild のみ指定時に SSM のみ参照し、その結果を返す | `common/chat/chat_loop.py` |
+| **T05-07-06** | ID未指定ガード | `_extract_chat_policy_from_sessions` が user/guild 未指定時に USM/SSMを呼ばず `{}` を返す | `common/chat/chat_loop.py` |
+| **T05-07-07** | _resolve_api_key | user_id=None, guild_idあり→server_key取得を確認（user_key非呼出） | `common/chat/chat_loop.py` |
+| **T05-07-08** | _resolve_api_key | user_idあり・guild_id=None→user_key取得のみ実行・None返却を確認 | `common/chat/chat_loop.py` |
 
 ```bash
 python -m tests.T05_ChatLoop_07_chat_loop_helpers_test

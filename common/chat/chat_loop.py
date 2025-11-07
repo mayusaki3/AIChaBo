@@ -6,25 +6,32 @@ from common.secret.store import store
 from common.utils.redact import redact
 from common.utils.logger import log_warn, log_error
 
-def _extract_chat_policy_from_sessions(user_id: int | None, guild_id: int | None) -> Dict[str, Any]:
+def _extract_chat_policy_from_sessions(
+    user_id: int | None,
+    guild_id: int | None,
+) -> dict:
     """
-    ユーザー/サーバーの非機密セッションからチャット方針（provider/model/その他パラメータ）を合成して返す。
-    - ユーザー側 > サーバー側 の優先でマージ
+    USM/SSM から非機密ポリシーを集約してマージする。
+
+    仕様:
+      - guild_id があれば SSM の non-secret policy を読み込む
+      - user_id があれば USM の non-secret policy を読み込み、同一キーはユーザー側で上書き
+      - user_id / guild_id ともに None の場合は空 dict
+    前提:
+      - SSM / USM はそれぞれ get_all_non_secret_policy(...) を実装している（互換ガード不要）
     """
-    user_policy = {}
-    server_policy = {}
+    merged: dict = {}
 
-    if guild_id:
-        # サーバーの全オプション（dict[str,bool] ではなく、方針が入る想定の場所から取得）
-        # 実装側で「どこに非機密を置くか」を決めているはずなので、既存の参照箇所に合わせる
-        server_policy = SSM.get_all_non_secret_policy(guild_id) if hasattr(SSM, "get_all_non_secret_policy") else {}
-    if user_id:
-        user_policy = USM.get_all_non_secret_policy(user_id) if hasattr(USM, "get_all_non_secret_policy") else {}
+    if guild_id is not None:
+        server_policy = SSM.get_all_non_secret_policy(guild_id) or {}
+        merged.update(server_policy)
 
-    # ユーザー優先で上書き
-    policy = dict(server_policy)
-    policy.update(user_policy)
-    return policy
+    if user_id is not None:
+        user_policy = USM.get_all_non_secret_policy(user_id) or {}
+        # ユーザー設定でサーバ設定を上書き
+        merged.update(user_policy)
+
+    return merged
 
 def _resolve_api_key(user_id: int | None, guild_id: int | None, provider: str) -> str | None:
     """
