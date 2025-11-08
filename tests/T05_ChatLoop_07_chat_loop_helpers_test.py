@@ -141,6 +141,90 @@ class ChatLoopHelpersTest(unittest.TestCase):
         fake_ssm.get_all_non_secret_policy.assert_not_called()
         fake_usm.get_all_non_secret_policy.assert_not_called()
 
+    # [T05-07-07]
+    # _resolve_api_key:
+    #  - user_id=None, guild_idあり
+    #  - server_key のみ取得され、user_key は呼び出されないことを確認
+    def test_07_resolve_api_key_guild_only_calls_server_key_only(self):
+        store_mock = MagicMock()
+        store_mock.get_user_key.return_value = "SHOULD_NOT_USE"
+        store_mock.get_server_key.return_value = "SERVER_KEY"
+
+        with patch.object(chat_loop, "store", store_mock):
+            key = chat_loop._resolve_api_key(user_id=None, guild_id=10, provider="openai")
+
+        self.assertEqual(key, "SERVER_KEY")
+        store_mock.get_user_key.assert_not_called()
+        store_mock.get_server_key.assert_called_once_with(10, "openai")
+
+    # [T05-07-08]
+    # _resolve_api_key:
+    #  - user_idあり・guild_id=None
+    #    - user_key を 1 回問い合わせ
+    #    - 取得できなければ None を返す
+    #    - server_key は呼び出されないことを確認
+    def test_08_resolve_api_key_user_only_missing_returns_none_and_no_server(self):
+        store_mock = MagicMock()
+        store_mock.get_user_key.return_value = None
+        store_mock.get_server_key.return_value = "SHOULD_NOT_USE"
+
+        with patch.object(chat_loop, "store", store_mock):
+            key = chat_loop._resolve_api_key(user_id=1, guild_id=None, provider="openai")
+
+        self.assertIsNone(key)
+        store_mock.get_user_key.assert_called_once_with(1, "openai")
+        store_mock.get_server_key.assert_not_called()
+
+    # [T05-07-07]
+    # _resolve_api_key:
+    #  - user_id=None, guild_idあり
+    #  - server_key のみ取得され、user_key は呼び出されないことを確認
+    def test_07_resolve_api_key_guild_only_calls_server_key_only(self):
+        store_mock = MagicMock()
+        store_mock.get_user_key.return_value = "SHOULD_NOT_USE"
+        store_mock.get_server_key.return_value = "SERVER_KEY"
+
+        with patch.object(chat_loop, "store", store_mock):
+            key = chat_loop._resolve_api_key(user_id=None, guild_id=10, provider="openai")
+
+        self.assertEqual(key, "SERVER_KEY")
+        store_mock.get_user_key.assert_not_called()
+        store_mock.get_server_key.assert_called_once_with(10, "openai")
+
+    # [T05-07-08]
+    # _resolve_api_key:
+    #  - user_idあり・guild_id=None
+    #    - user_key を 1 回問い合わせ
+    #    - 取得できなければ None を返す
+    #    - server_key は呼び出されないことを確認
+    def test_08_resolve_api_key_user_only_missing_returns_none_and_no_server(self):
+        store_mock = MagicMock()
+        store_mock.get_user_key.return_value = None
+        store_mock.get_server_key.return_value = "SHOULD_NOT_USE"
+
+        with patch.object(chat_loop, "store", store_mock):
+            key = chat_loop._resolve_api_key(user_id=1, guild_id=None, provider="openai")
+
+        self.assertIsNone(key)
+        store_mock.get_user_key.assert_called_once_with(1, "openai")
+        store_mock.get_server_key.assert_not_called()
+
+    # [T05-07-09]
+    # _resolve_api_key:
+    #  - guild_idありだが get_server_key が None を返す場合
+    #  - None を返却することを確認
+    def test_09_resolve_api_key_guild_only_serverkey_none_returns_none(self):
+        store_mock = MagicMock()
+        store_mock.get_user_key.return_value = None
+        store_mock.get_server_key.return_value = None
+
+        with patch.object(chat_loop, "store", store_mock):
+            key = chat_loop._resolve_api_key(user_id=None, guild_id=999, provider="openai")
+
+        self.assertIsNone(key)
+        store_mock.get_user_key.assert_not_called()
+        store_mock.get_server_key.assert_called_once_with(999, "openai")
+
 
 if __name__ == "__main__":
     mapping = {
@@ -156,6 +240,12 @@ if __name__ == "__main__":
             ("T05-07-05", "_extract_chat_policy_from_sessions: guildのみ指定 -> SSMのみ"),
         "test_06_extract_policy_none_ids_returns_empty":
             ("T05-07-06", "_extract_chat_policy_from_sessions: user/guild無し -> {} & USM/SSM未呼び出し"),
+        "test_07_resolve_api_key_guild_only_calls_server_key_only":
+            ("T05-07-07", "_resolve_api_key: user_id=None, guild_idあり -> server_key取得のみ & user_key非呼び出し"),
+        "test_08_resolve_api_key_user_only_missing_returns_none_and_no_server":
+            ("T05-07-08", "_resolve_api_key: user_idあり・guild_id=None -> user_keyのみ問い合わせ・None返却・server_key非呼び出し"),
+        "test_09_resolve_api_key_guild_only_serverkey_none_returns_none":
+            ("T05-07-09", "_resolve_api_key: guild_idあり・server_key=None -> None返却"),
     }
 
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ChatLoopHelpersTest)

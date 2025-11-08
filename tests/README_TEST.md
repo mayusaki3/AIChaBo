@@ -333,8 +333,9 @@ python -m tests.T05_ChatLoop_06_chat_loop_paths_cover_test
 | **T05-07-04** | provider関数解決(失敗) | `_get_provider_chat_fn` がエントリ不在時に `RuntimeError` を送出する | `common/chat/chat_loop.py` |
 | **T05-07-05** | guild-only方針 | `_extract_chat_policy_from_sessions` が guild のみ指定時に SSM のみ参照し、その結果を返す | `common/chat/chat_loop.py` |
 | **T05-07-06** | ID未指定ガード | `_extract_chat_policy_from_sessions` が user/guild 未指定時に USM/SSMを呼ばず `{}` を返す | `common/chat/chat_loop.py` |
-| **T05-07-07** | _resolve_api_key | user_id=None, guild_idあり→server_key取得を確認（user_key非呼出） | `common/chat/chat_loop.py` |
-| **T05-07-08** | _resolve_api_key | user_idあり・guild_id=None→user_key取得のみ実行・None返却を確認 | `common/chat/chat_loop.py` |
+| **T05-07-07** | APIキー解決(guildのみ) | `_resolve_api_key` が user_id=None, guild_idあり時に server_key のみ問い合わせる | `common/chat/chat_loop.py` |
+| **T05-07-08** | APIキー解決(userのみ/鍵無し) | `_resolve_api_key` が user_idあり, guild_id=None 時に user_key のみ問い合わせ、未取得なら None を返す | `common/chat/chat_loop.py` |
+| **T05-07-09** | APIキー解決(guildのみ/鍵無し) | `_resolve_api_key` が guild_idありで server_key=None の場合に None を返す | `common/chat/chat_loop.py` |
 
 ```bash
 python -m tests.T05_ChatLoop_07_chat_loop_helpers_test
