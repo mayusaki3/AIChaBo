@@ -1,6 +1,6 @@
-# tests/T02_SecretStore_02_store_edge_test.py
+# tests/common/secret/T01_SecretStore_02_store_edge_test.py
 # ------------------------------------------------------------
-# T02-02 : SecretStore edges & recovery
+# M01:T01-02 : SecretStore edges & recovery
 # 目的:
 #  - 例外・境界・復旧系の網羅で coverage を底上げ
 # スコープ:
@@ -23,7 +23,7 @@ from tests._report import _Reporter as Reporter
 # テスト対象
 from common.secret.store import store, USERS_JSON, SERVERS_JSON, MASTER_KEY_PATH
 
-rep = Reporter("T02-02 SecretStore edges & recovery")
+rep = Reporter("M01:T01-02 SecretStore edges & recovery")
 PROV = "openai"  # 正規化済み名称（小文字）
 UID_BASE = 990000
 GID_BASE = 880000
@@ -83,7 +83,7 @@ class SecretStoreEdgeTest(unittest.TestCase):
         except Exception:
             pass
 
-    # T02-02-01: put_user_key 空 provider → ValueError
+    # M01:T01-02-01: put_user_key 空 provider → ValueError
     def test_01_put_user_empty_provider_raises(self):
         uid, _ = _fresh_ids()
         with self.assertRaises(ValueError):
@@ -91,7 +91,7 @@ class SecretStoreEdgeTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             store.put_user_key(uid, None, b"xyz")  # type: ignore[arg-type]
 
-    # T02-02-02: put_server_key 空 provider → ValueError
+    # M01:T01-02-02: put_server_key 空 provider → ValueError
     def test_02_put_server_empty_provider_raises(self):
         _, gid = _fresh_ids()
         with self.assertRaises(ValueError):
@@ -99,19 +99,19 @@ class SecretStoreEdgeTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             store.put_server_key(gid, None, b"xyz")  # type: ignore[arg-type]
 
-    # T02-02-03: get_user_key 空 provider → None
+    # M01:T01-02-03: get_user_key 空 provider → None
     def test_03_get_user_empty_provider_returns_none(self):
         uid, _ = _fresh_ids()
         self.assertIsNone(store.get_user_key(uid, ""))   # 空
         self.assertIsNone(store.get_user_key(uid, None)) # type: ignore[arg-type]
 
-    # T02-02-04: get_server_key 空 provider → None
+    # M01:T01-02-04: get_server_key 空 provider → None
     def test_04_get_server_empty_provider_returns_none(self):
         _, gid = _fresh_ids()
         self.assertIsNone(store.get_server_key(gid, ""))   # 空
         self.assertIsNone(store.get_server_key(gid, None)) # type: ignore[arg-type]
 
-    # T02-02-05: has_server_any_key False → True
+    # M01:T01-02-05: has_server_any_key False → True
     def test_05_has_server_any_key_false_true(self):
         _, gid = _fresh_ids()
         # 念のため事前掃除（存在しても例外にならない仕様）
@@ -120,7 +120,7 @@ class SecretStoreEdgeTest(unittest.TestCase):
         store.put_server_key(gid, PROV, b"tok")
         self.assertTrue(store.has_server_any_key(gid))
 
-    # T02-02-06: delete_server_keys 安全（存在しなくても例外なし）
+    # M01:T01-02-06: delete_server_keys 安全（存在しなくても例外なし）
     def test_06_delete_server_keys_is_safe(self):
         _, gid = _fresh_ids()
         # 無い gid でも例外にならない
@@ -128,7 +128,7 @@ class SecretStoreEdgeTest(unittest.TestCase):
         # 事後も当然 False
         self.assertFalse(store.has_server_any_key(gid))
 
-    # T02-02-07: 後方互換 - 'fernet:' なしでも復号できる
+    # M01:T01-02-07: 後方互換 - 'fernet:' なしでも復号できる
     def test_07_backward_compat_no_prefix(self):
         uid, _ = _fresh_ids()
         # 正規の保存で暗号文を作る
@@ -146,7 +146,7 @@ class SecretStoreEdgeTest(unittest.TestCase):
         got = store.get_user_key(uid, PROV)
         self.assertEqual(got, b"SAMPLE")
 
-    # T02-02-08: 壊れた JSON を自動復旧（_load_json の復旧経路）
+    # M01:T01-02-08: 壊れた JSON を自動復旧（_load_json の復旧経路）
     def test_08_load_json_recovery(self):
         # users.json をわざと壊す
         Path(USERS_JSON).parent.mkdir(parents=True, exist_ok=True)
@@ -160,7 +160,7 @@ class SecretStoreEdgeTest(unittest.TestCase):
         with open(USERS_JSON, "r", encoding="utf-8") as f:
             json.load(f)  # パースできればOK
 
-    # T02-02-09: delete_user_keys の安全性（存在していても「空化」で終わる）
+    # M01:T01-02-09: delete_user_keys の安全性（存在していても「空化」で終わる）
     def test_09_delete_user_keys_clears_providers(self):
         uid, _ = _fresh_ids()
         store.put_user_key(uid, PROV, b"abc")
@@ -170,9 +170,8 @@ class SecretStoreEdgeTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    SUITE_TITLE = "T02-02 SecretStore edges & recovery"
+    SUITE_TITLE = "M01:T01-02 SecretStore edges & recovery"
     print(f"=== {SUITE_TITLE} ===")
-    print(f"Secret backend: {store.backend_name()}")
     # 共通レポータの体裁で出す（❌/✅ + CASE 番号）
     titlemap = {
         "test_01_put_user_empty_provider_raises":   "put_user empty provider -> ValueError",

@@ -1,6 +1,6 @@
-# tests/T02_SecretStore_03_store_init_test.py
+# tests/common/secret/T01_SecretStore_03_store_init_test.py
 # ------------------------------------------------------------
-# T02-03 : SecretStore init / key-gen / error paths
+# M01:T01-03 : SecretStore init / key-gen / error paths
 # 目的:
 #  - AC_MASTER_KEY 環境変数の有無での初期化分岐
 #  - master.key 自動生成＋chmod 例外経路
@@ -26,7 +26,7 @@ from tests._report import _Reporter as Reporter
 
 import common.secret.store as mod  # モジュール参照（定数を差し替えるため）
 
-rep = Reporter("T02-03 SecretStore init & errors")
+rep = Reporter("M01:T01-03 SecretStore init & errors")
 
 
 def _temp_paths():
@@ -70,7 +70,7 @@ class SecretStoreInitTest(unittest.TestCase):
         # temp 後片付け
         shutil.rmtree(self.root, ignore_errors=True)
 
-    # T02-03-01: AC_MASTER_KEY あり → master.key を作らずに初期化
+    # M01:T01-03-01: AC_MASTER_KEY あり → master.key を作らずに初期化
     def test_01_init_with_env_key(self):
         # Fernet キー文字列（32byte base64）
         from cryptography.fernet import Fernet
@@ -84,7 +84,7 @@ class SecretStoreInitTest(unittest.TestCase):
         ss.put_user_key(100, "openai", b"envtok")
         self.assertEqual(ss.get_user_key(100, "openai"), b"envtok")
 
-    # T02-03-02: envなし → master.key を生成、chmod 例外経路を踏む
+    # M01:T01-03-02: envなし → master.key を生成、chmod 例外経路を踏む
     def test_02_init_generates_masterkey_and_handles_chmod_error(self):
         # os.chmod を例外を投げるダミーにする（except経路）
         real_chmod = os.chmod
@@ -100,7 +100,7 @@ class SecretStoreInitTest(unittest.TestCase):
         self.assertTrue(self.users.exists())
         self.assertTrue(self.servers.exists())
 
-    # T02-03-03: _load_json - ファイル未作成なら {} を返す
+    # M01:T01-03-03: _load_json - ファイル未作成なら {} を返す
     def test_03_load_json_when_path_not_exists(self):
         # 明示的に削除して {} 経路へ
         if self.users.exists():
@@ -109,7 +109,7 @@ class SecretStoreInitTest(unittest.TestCase):
         # 直接内部APIを呼ぶ必要はなく、公開API越しに間接確認でもOK
         self.assertEqual(ss.get_user_keys(99999), {})
 
-    # T02-03-04: 破損トークン（復号不可）→ get_user_key は None, get_user_keys はスキップ
+    # M01:T01-03-04: 破損トークン（復号不可）→ get_user_key は None, get_user_keys はスキップ
     def test_04_corrupted_cipher_is_skipped(self):
         ss = mod.SecretStore()
         # users.json に復号できないトークンを書き込む
@@ -126,7 +126,7 @@ class SecretStoreInitTest(unittest.TestCase):
         keys = ss.get_user_keys(12345)
         self.assertEqual(keys, {}, "すべて破損なら空辞書")
 
-    # T02-03-05: get_server_keys - 片方だけ破損 → 正常分のみ残る
+    # M01:T01-03-05: get_server_keys - 片方だけ破損 → 正常分のみ残る
     def test_05_server_keys_skip_only_corrupt_entries(self):
         ss = mod.SecretStore()
         # 正常トークンを1つ作る
@@ -143,12 +143,12 @@ class SecretStoreInitTest(unittest.TestCase):
         got = ss.get_server_keys(777)
         self.assertEqual(got, {"openai": b"OK"})
 
-    # T02-03-06: get_server_key - 不明provider → None
+    # M01:T01-03-06: get_server_key - 不明provider → None
     def test_06_get_server_key_unknown_provider(self):
         ss = mod.SecretStore()
         self.assertIsNone(ss.get_server_key(555, "nope"))
 
-    # T02-03-07: _save_json - os.replace が失敗 → finally で tmp を後始末
+    # M01:T01-03-07: _save_json - os.replace が失敗 → finally で tmp を後始末
     def test_07_save_json_tmp_cleanup_on_replace_error(self):
         ss = mod.SecretStore()
         real_replace = mod.os.replace
@@ -163,16 +163,16 @@ class SecretStoreInitTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    SUITE_TITLE = "T02-03 SecretStore init & errors"
+    SUITE_TITLE = "M01:T01-03 SecretStore init & errors"
     print(f"=== {SUITE_TITLE} ===")
     cases = [
-        ("T02-03-01", "init with env key (no master.key)"),
-        ("T02-03-02", "init w/o env -> master.key + chmod except"),
-        ("T02-03-03", "_load_json: path not exists -> {}"),
-        ("T02-03-04", "corrupt tokens are skipped (user)"),
-        ("T02-03-05", "corrupt tokens are skipped (server)"),
-        ("T02-03-06", "get_server_key unknown provider -> None"),
-        ("T02-03-07", "_save_json replace-error -> tmp cleanup"),
+        ("M01:T01-03-01", "init with env key (no master.key)"),
+        ("M01:T01-03-02", "init w/o env -> master.key + chmod except"),
+        ("M01:T01-03-03", "_load_json: path not exists -> {}"),
+        ("M01:T01-03-04", "corrupt tokens are skipped (user)"),
+        ("M01:T01-03-05", "corrupt tokens are skipped (server)"),
+        ("M01:T01-03-06", "get_server_key unknown provider -> None"),
+        ("M01:T01-03-07", "_save_json replace-error -> tmp cleanup"),
     ]
     for meth, (_, title) in zip([
         "test_01_init_with_env_key",
