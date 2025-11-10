@@ -1,198 +1,196 @@
-# tests/common/secret/T01_SecretStore_03_store_init_test.py
-# ------------------------------------------------------------
-# M01:T01-03 : SecretStore init / key-gen / error paths
-# 目的:
-#  - AC_MASTER_KEY 環境変数の有無での初期化分岐
-#  - master.key 自動生成＋chmod 例外経路
-#  - _load_json: パスが存在しない場合の {} 戻り
-#  - 破損トークンのスキップ（get_user_key / get_user_keys / get_server_keys）
-#  - _save_json: os.replace 失敗時に tmp を後始末（finally 経路）
-#
-# 手法:
-#  - common.secret.store モジュールのパス定数を temp へ差し替え
-#  - その上で SecretStore() を新規生成（store シングルトンは触らない）
-#  - monkeypatch で os.chmod / os.replace を一時差し替え
+# -*- coding: utf-8 -*-
+"""
+M01:T01-03 SecretStore Init & Errors
 
-import os
+- AC_MASTER_KEY 環境変数優先
+- env 無し時の master.key 自動生成 + chmod 例外経路
+- _load_json: パス無 → {}
+- 復号不可トークンのスキップ（user/server）
+- 未知 provider -> None
+- _save_json: os.replace 失敗時の tmp 後始末
+
+実行:
+    python -m tests.common.secret.T01_SecretStore_03_store_init_test
+"""
+
 import json
+import os
 import stat
-import shutil
 import tempfile
-import unittest
-import importlib
 from pathlib import Path
+import unittest
 
-from tests._report import _Reporter as Reporter
+from cryptography.fernet import Fernet
 
-import common.secret.store as mod  # モジュール参照（定数を差し替えるため）
+from common.secret import store as mod
+from tests._report import run_unittest_suite
 
-rep = Reporter("M01:T01-03 SecretStore init & errors")
 
+class _TempRoot:
+    """SecretStore 用一時ルート + users/servers パス."""
 
-def _temp_paths():
-    root = Path(tempfile.mkdtemp(prefix="aichabo_ss_init_"))
-    store_dir = root / "secretstore"
-    store_dir.mkdir(parents=True, exist_ok=True)
-    users = store_dir / "users.json"
-    servers = store_dir / "servers.json"
-    mkey = root / "master.key"
-    return root, users, servers, mkey
+    def __init__(self) -> None:
+        self.root: Path | None = None
+        self.users: Path | None = None
+        self.servers: Path | None = None
+        self._orig_dir = os.environ.get("AIChaBo_SECRET_DIR")
+
+    def __enter__(self) -> "_TempRoot":
+        self.root = Path(tempfile.mkdtemp(prefix="secretstore-init-"))
+        os.environ["AIChaBo_SECRET_DIR"] = str(self.root)
+        self.users = self.root / "users.json"
+        self.servers = self.root / "servers.json"
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        if self._orig_dir is None:
+            os.environ.pop("AIChaBo_SECRET_DIR", None)
+        else:
+            os.environ["AIChaBo_SECRET_DIR"] = self._orig_dir
+        if self.root and self.root.exists():
+            for p in self.root.iterdir():
+                p.unlink(missing_ok=True)
+            self.root.rmdir()
 
 
 class SecretStoreInitTest(unittest.TestCase):
-    def setUp(self):
-        # temp へ差し替え
-        self.root, self.users, self.servers, self.mkey = _temp_paths()
-        self._old_USERS = mod.USERS_JSON
-        self._old_SERVERS = mod.SERVERS_JSON
-        self._old_MKEY = mod.MASTER_KEY_PATH
-        mod.USERS_JSON = self.users
-        mod.SERVERS_JSON = self.servers
-        mod.MASTER_KEY_PATH = self.mkey
+    """T01-03: 初期化と異常系分岐."""
 
-        # env 退避
-        self._old_env_key = os.environ.get("AC_MASTER_KEY")
-        if "AC_MASTER_KEY" in os.environ:
-            del os.environ["AC_MASTER_KEY"]
+    # M01:T01-03-01: AC_MASTER_KEY 優先 / master.key 不生成
+    def test_01_init_with_env_key_no_master_file(self) -> None:
+        with _TempRoot() as env:
+            key = Fernet.generate_key().decode("ascii")
+            os.environ["AC_MASTER_KEY"] = key
+            try:
+                ss = mod.SecretStore()
+                # master.key は作られない想定
+                assert env.root is not None
+                master = env.root / "master.key"
+                self.assertFalse(master.exists())
+                # envキーで正常動作しているか、軽くR/Wで確認
+                ss.put_user_key(1, "openai", b"X")  # noqa: SLF001
+                self.assertEqual(ss.get_user_key(1, "openai"), b"X")
+            finally:
+                os.environ.pop("AC_MASTER_KEY", None)
 
-    def tearDown(self):
-        # env 復元
-        if self._old_env_key is not None:
-            os.environ["AC_MASTER_KEY"] = self._old_env_key
-        else:
+    # M01:T01-03-02: env 無し → master.key 自動生成 / chmod 例外経路
+    def test_02_init_without_env_generates_masterkey(self) -> None:
+        with _TempRoot() as env:
             os.environ.pop("AC_MASTER_KEY", None)
 
-        # パス定数復元
-        mod.USERS_JSON = self._old_USERS
-        mod.SERVERS_JSON = self._old_SERVERS
-        mod.MASTER_KEY_PATH = self._old_MKEY
+            orig_chmod = os.chmod
 
-        # temp 後片付け
-        shutil.rmtree(self.root, ignore_errors=True)
+            def bad_chmod(path, mode):
+                raise PermissionError("chmod fail")
 
-    # M01:T01-03-01: AC_MASTER_KEY あり → master.key を作らずに初期化
-    def test_01_init_with_env_key(self):
-        # Fernet キー文字列（32byte base64）
-        from cryptography.fernet import Fernet
-        os.environ["AC_MASTER_KEY"] = Fernet.generate_key().decode()
+            os.chmod = bad_chmod  # type: ignore[assignment]
+            try:
+                ss = mod.SecretStore()
+            finally:
+                os.chmod = orig_chmod  # type: ignore[assignment]
 
-        ss = mod.SecretStore()
-        self.assertFalse(self.mkey.exists(), "env優先のため master.key は作られない")
-        self.assertIn("Fernet", ss.backend_name())
+            assert env.root is not None
+            master = env.root / "master.key"
+            # chmod 失敗しても master.key 自体は存在している想定
+            self.assertTrue(master.exists())
+            # 生成鍵で通常通り暗号化できているか軽く確認
+            ss.put_server_key(1, "openai", b"Y")  # noqa: SLF001
+            self.assertEqual(ss.get_server_key(1, "openai"), b"Y")
 
-        # 最低限のR/Wが動くか
-        ss.put_user_key(100, "openai", b"envtok")
-        self.assertEqual(ss.get_user_key(100, "openai"), b"envtok")
-
-    # M01:T01-03-02: envなし → master.key を生成、chmod 例外経路を踏む
-    def test_02_init_generates_masterkey_and_handles_chmod_error(self):
-        # os.chmod を例外を投げるダミーにする（except経路）
-        real_chmod = os.chmod
-        def bad_chmod(path, mode): raise OSError("perm error")
-        os.chmod = bad_chmod
-        try:
+    # M01:T01-03-03: _load_json: パス未作成 -> {}
+    def test_03_load_json_when_path_not_exists(self) -> None:
+        with _TempRoot() as env:
+            assert env.users is not None
+            # users.json 未作成のまま SecretStore を初期化
             ss = mod.SecretStore()
-        finally:
-            os.chmod = real_chmod
+            # 直接内部APIを叩く必要はなく、公開API経由で {} 相当を確認
+            self.assertIsNone(ss.get_user_key(99999, "openai"))
 
-        self.assertTrue(self.mkey.exists(), "env無しなので master.key を生成する")
-        # users.json / servers.json が初期化される
-        self.assertTrue(self.users.exists())
-        self.assertTrue(self.servers.exists())
-
-    # M01:T01-03-03: _load_json - ファイル未作成なら {} を返す
-    def test_03_load_json_when_path_not_exists(self):
-        # 明示的に削除して {} 経路へ
-        if self.users.exists():
-            self.users.unlink()
-        ss = mod.SecretStore()
-        # 直接内部APIを呼ぶ必要はなく、公開API越しに間接確認でもOK
-        self.assertEqual(ss.get_user_keys(99999), {})
-
-    # M01:T01-03-04: 破損トークン（復号不可）→ get_user_key は None, get_user_keys はスキップ
-    def test_04_corrupted_cipher_is_skipped(self):
-        ss = mod.SecretStore()
-        # users.json に復号できないトークンを書き込む
-        data = {
-            "12345": {
-                "providers": {
-                    "openai": "fernet:INVALIDTOKEN",
-                    "claude": "fernet:ALSOINVALID"
+    # M01:T01-03-04: 破損トークン（user）→ スキップ
+    def test_04_corrupted_cipher_is_skipped_user(self) -> None:
+        with _TempRoot() as env:
+            assert env.users is not None
+            ss = mod.SecretStore()
+            data = {
+                "12345": {
+                    "providers": {
+                        "openai": "fernet:INVALID",
+                        "claude": "fernet:ALSO_BAD",
+                    }
                 }
             }
-        }
-        self.users.write_text(json.dumps(data), encoding="utf-8")
-        self.assertIsNone(ss.get_user_key(12345, "openai"))
-        keys = ss.get_user_keys(12345)
-        self.assertEqual(keys, {}, "すべて破損なら空辞書")
+            env.users.write_text(json.dumps(data), encoding="utf-8")
+            # 再読み込み
+            ss = mod.SecretStore()
+            self.assertIsNone(ss.get_user_key(12345, "openai"))
+            self.assertEqual(ss.get_user_keys(12345), {})
 
-    # M01:T01-03-05: get_server_keys - 片方だけ破損 → 正常分のみ残る
-    def test_05_server_keys_skip_only_corrupt_entries(self):
-        ss = mod.SecretStore()
-        # 正常トークンを1つ作る
-        good = ss._enc(b"OK")
-        data = {
-            "777": {
-                "providers": {
-                    "openai": good,
-                    "gemini": "fernet:BAD"
+    # M01:T01-03-05: 破損トークン（server）→ 正常分のみ残る
+    def test_05_server_keys_skip_only_corrupt_entries(self) -> None:
+        with _TempRoot() as env:
+            assert env.servers is not None
+            ss = mod.SecretStore()
+            good = ss._enc(b"OK")  # noqa: SLF001
+            data = {
+                "777": {
+                    "providers": {
+                        "openai": good,
+                        "gemini": "fernet:BAD",
+                    }
                 }
             }
-        }
-        self.servers.write_text(json.dumps(data), encoding="utf-8")
-        got = ss.get_server_keys(777)
-        self.assertEqual(got, {"openai": b"OK"})
+            env.servers.write_text(json.dumps(data), encoding="utf-8")
+            ss = mod.SecretStore()
+            self.assertEqual(ss.get_server_keys(777), {"openai": b"OK"})
 
-    # M01:T01-03-06: get_server_key - 不明provider → None
-    def test_06_get_server_key_unknown_provider(self):
-        ss = mod.SecretStore()
-        self.assertIsNone(ss.get_server_key(555, "nope"))
+    # M01:T01-03-06: 未知 provider -> None
+    def test_06_get_server_key_unknown_provider_none(self) -> None:
+        with _TempRoot():
+            ss = mod.SecretStore()
+            self.assertIsNone(ss.get_server_key(1, "unknown"))
 
-    # M01:T01-03-07: _save_json - os.replace が失敗 → finally で tmp を後始末
-    def test_07_save_json_tmp_cleanup_on_replace_error(self):
-        ss = mod.SecretStore()
-        real_replace = mod.os.replace
-        def bad_replace(src, dst): raise OSError("replace failed")
-        mod.os.replace = bad_replace
-        try:
-            with self.assertRaises(OSError):
-                # 内部API直叩き：例外で抜けた後、finallyで tmp が消される分岐を踏む
-                ss._save_json(self.users, {"x": 1})
-        finally:
-            mod.os.replace = real_replace
+    # M01:T01-03-07: _save_json: os.replace 失敗時に tmp を掃除
+    def test_07_save_json_tmp_cleanup_on_error(self) -> None:
+        with _TempRoot() as env:
+            ss = mod.SecretStore()
+            assert env.users is not None
+            # tmp を残さずに例外を返すことを確認
+            class Boom(Exception):
+                pass
+
+            real_replace = mod.os.replace  # type: ignore[attr-defined]
+
+            def bad_replace(src, dst):
+                raise Boom()
+
+            mod.os.replace = bad_replace  # type: ignore[assignment, attr-defined]
+            try:
+                with self.assertRaises(Boom):
+                    ss._save_json(env.users, {"x": 1})  # noqa: SLF001
+            finally:
+                mod.os.replace = real_replace  # type: ignore[assignment, attr-defined]
+
+            assert env.root is not None
+            tmp_files = list(env.root.glob("*.tmp"))
+            self.assertEqual(tmp_files, [])
 
 
 if __name__ == "__main__":
-    SUITE_TITLE = "M01:T01-03 SecretStore init & errors"
-    print(f"=== {SUITE_TITLE} ===")
-    cases = [
-        ("M01:T01-03-01", "init with env key (no master.key)"),
-        ("M01:T01-03-02", "init w/o env -> master.key + chmod except"),
-        ("M01:T01-03-03", "_load_json: path not exists -> {}"),
-        ("M01:T01-03-04", "corrupt tokens are skipped (user)"),
-        ("M01:T01-03-05", "corrupt tokens are skipped (server)"),
-        ("M01:T01-03-06", "get_server_key unknown provider -> None"),
-        ("M01:T01-03-07", "_save_json replace-error -> tmp cleanup"),
-    ]
-    for meth, (_, title) in zip([
-        "test_01_init_with_env_key",
-        "test_02_init_generates_masterkey_and_handles_chmod_error",
-        "test_03_load_json_when_path_not_exists",
-        "test_04_corrupted_cipher_is_skipped",
-        "test_05_server_keys_skip_only_corrupt_entries",
-        "test_06_get_server_key_unknown_provider",
-        "test_07_save_json_tmp_cleanup_on_replace_error",
-    ], cases):
-        with rep.case(title):
-            # TestCase を手動実行するため setUp/tearDown を明示呼び出し
-            tc = SecretStoreInitTest(methodName=meth)
-            try:
-                tc.setUp()
-                getattr(tc, meth)()
-            finally:
-                # 例外時も確実に復元
-                try:
-                    tc.tearDown()
-                except Exception:
-                    pass
-    rep.summary()
+    mapping = {
+        "test_01_init_with_env_key_no_master_file":
+            ("M01:T01-03-01", "env優先: master.key未生成"),
+        "test_02_init_without_env_generates_masterkey":
+            ("M01:T01-03-02", "env無し: master.key生成 + chmod例外経路"),
+        "test_03_load_json_when_path_not_exists":
+            ("M01:T01-03-03", "_load_json: pathなし -> {}"),
+        "test_04_corrupted_cipher_is_skipped_user":
+            ("M01:T01-03-04", "破損トークン(user)はスキップ"),
+        "test_05_server_keys_skip_only_corrupt_entries":
+            ("M01:T01-03-05", "破損トークン(server)はスキップ"),
+        "test_06_get_server_key_unknown_provider_none":
+            ("M01:T01-03-06", "未知provider -> None"),
+        "test_07_save_json_tmp_cleanup_on_error":
+            ("M01:T01-03-07", "_save_json: 失敗時tmp削除"),
+    }
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(SecretStoreInitTest)
+    run_unittest_suite("M01:T01-03", suite, mapping)

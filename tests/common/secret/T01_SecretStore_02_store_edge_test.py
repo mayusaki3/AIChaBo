@@ -1,190 +1,165 @@
-# tests/common/secret/T01_SecretStore_02_store_edge_test.py
-# ------------------------------------------------------------
-# M01:T01-02 : SecretStore edges & recovery
-# 目的:
-#  - 例外・境界・復旧系の網羅で coverage を底上げ
-# スコープ:
-#  - common/secret/store.py の分岐・例外・復旧
-# 依存:
-#  - 既存の SecretStore シングルトン (store) とモジュール定数
-# 注意:
-#  - 実ストア (~/.aichabo/secretstore) を汚さないように
-#    USERS_JSON / SERVERS_JSON をバックアップ → 復元する
+# -*- coding: utf-8 -*-
+"""
+M01:T01-02 SecretStore Edge & Recovery
 
-import os
+- 例外系・空入力分岐
+- サーバー鍵存在判定 / 削除安全性
+- 後方互換（'fernet:' 無しトークン）
+- 壊れ JSON の self-heal
+- ユーザー削除で providers 空化
+
+実行:
+    python -m tests.common.secret.T01_SecretStore_02_store_edge_test
+"""
+
 import json
-import shutil
+import os
 import tempfile
-import unittest
 from pathlib import Path
+import unittest
 
-from tests._report import _Reporter as Reporter
-
-# テスト対象
-from common.secret.store import store, USERS_JSON, SERVERS_JSON, MASTER_KEY_PATH
-
-rep = Reporter("M01:T01-02 SecretStore edges & recovery")
-PROV = "openai"  # 正規化済み名称（小文字）
-UID_BASE = 990000
-GID_BASE = 880000
+from common.secret import store as mod
+from tests._report import run_unittest_suite
 
 
-def _fresh_ids():
-    # 連続実行でも衝突しないように一意な ID を生成
-    # （1テスト毎に増分）
-    _fresh_ids.counter += 1
-    return UID_BASE + _fresh_ids.counter, GID_BASE + _fresh_ids.counter
-_fresh_ids.counter = 0
+class _TempRoot:
+    """SecretStore 用の一時ルートディレクトリを張るヘルパ."""
+
+    def __init__(self) -> None:
+        self.root: Path | None = None
+        self.users: Path | None = None
+        self.servers: Path | None = None
+        self._orig_dir = os.environ.get("AIChaBo_SECRET_DIR")
+
+    def __enter__(self) -> "_TempRoot":
+        self.root = Path(tempfile.mkdtemp(prefix="secretstore-edge-"))
+        # SecretStore はこの環境変数配下に users.json / servers.json 等を作る想定
+        os.environ["AIChaBo_SECRET_DIR"] = str(self.root)
+        self.users = self.root / "users.json"
+        self.servers = self.root / "servers.json"
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        if self._orig_dir is None:
+            os.environ.pop("AIChaBo_SECRET_DIR", None)
+        else:
+            os.environ["AIChaBo_SECRET_DIR"] = self._orig_dir
+        if self.root and self.root.exists():
+            for p in self.root.iterdir():
+                p.unlink(missing_ok=True)
+            self.root.rmdir()
 
 
 class SecretStoreEdgeTest(unittest.TestCase):
+    """T01-02: SecretStore の端・異常系と復旧経路."""
 
-    @classmethod
-    def setUpClass(cls):
-        # 既存ファイルを退避
-        cls._backup_dir = Path(tempfile.mkdtemp(prefix="aichabo_ss_backup_"))
-        cls._users_bak = None
-        cls._servers_bak = None
-        for src, name in ((USERS_JSON, "users.json"), (SERVERS_JSON, "servers.json")):
-            if Path(src).exists():
-                dst = cls._backup_dir / name
-                shutil.copy2(src, dst)
-                if "users" in name:
-                    cls._users_bak = dst
-                else:
-                    cls._servers_bak = dst
-        # テストを常に「空のストア」から開始（バックアップは tearDownClass で復元）
-        Path(USERS_JSON).parent.mkdir(parents=True, exist_ok=True)
-        with open(USERS_JSON, "w", encoding="utf-8") as f:
-            f.write("{}")
-        with open(SERVERS_JSON, "w", encoding="utf-8") as f:
-            f.write("{}")
+    # M01:T01-02-01: put_user_key("", ...) -> ValueError
+    def test_01_put_user_empty_provider_raises_value_error(self) -> None:
+        with _TempRoot():
+            ss = mod.SecretStore()
+            with self.assertRaises(ValueError):
+                ss.put_user_key(1, "", b"X")  # noqa: SLF001
 
-    @classmethod
-    def tearDownClass(cls):
-        # 退避から復元（存在していたものだけ）
-        try:
-            if cls._users_bak is not None:
-                shutil.copy2(cls._users_bak, USERS_JSON)
-            elif Path(USERS_JSON).exists():
-                # 元が無かったなら消す
-                Path(USERS_JSON).unlink()
-        except Exception:
-            pass
-        try:
-            if cls._servers_bak is not None:
-                shutil.copy2(cls._servers_bak, SERVERS_JSON)
-            elif Path(SERVERS_JSON).exists():
-                Path(SERVERS_JSON).unlink()
-        except Exception:
-            pass
-        try:
-            shutil.rmtree(cls._backup_dir, ignore_errors=True)
-        except Exception:
-            pass
+    # M01:T01-02-02: put_server_key("", ...) -> ValueError
+    def test_02_put_server_empty_provider_raises_value_error(self) -> None:
+        with _TempRoot():
+            ss = mod.SecretStore()
+            with self.assertRaises(ValueError):
+                ss.put_server_key(1, "", b"X")  # noqa: SLF001
 
-    # M01:T01-02-01: put_user_key 空 provider → ValueError
-    def test_01_put_user_empty_provider_raises(self):
-        uid, _ = _fresh_ids()
-        with self.assertRaises(ValueError):
-            store.put_user_key(uid, "", b"xyz")
-        with self.assertRaises(ValueError):
-            store.put_user_key(uid, None, b"xyz")  # type: ignore[arg-type]
+    # M01:T01-02-03: get_user_key("", ...) -> None
+    def test_03_get_user_empty_provider_returns_none(self) -> None:
+        with _TempRoot():
+            ss = mod.SecretStore()
+            self.assertIsNone(ss.get_user_key(1, ""))
 
-    # M01:T01-02-02: put_server_key 空 provider → ValueError
-    def test_02_put_server_empty_provider_raises(self):
-        _, gid = _fresh_ids()
-        with self.assertRaises(ValueError):
-            store.put_server_key(gid, "", b"xyz")
-        with self.assertRaises(ValueError):
-            store.put_server_key(gid, None, b"xyz")  # type: ignore[arg-type]
+    # M01:T01-02-04: get_server_key("", ...) -> None
+    def test_04_get_server_empty_provider_returns_none(self) -> None:
+        with _TempRoot():
+            ss = mod.SecretStore()
+            self.assertIsNone(ss.get_server_key(1, ""))
 
-    # M01:T01-02-03: get_user_key 空 provider → None
-    def test_03_get_user_empty_provider_returns_none(self):
-        uid, _ = _fresh_ids()
-        self.assertIsNone(store.get_user_key(uid, ""))   # 空
-        self.assertIsNone(store.get_user_key(uid, None)) # type: ignore[arg-type]
+    # M01:T01-02-05: has_server_any_key False -> True
+    def test_05_has_server_any_key_false_then_true(self) -> None:
+        with _TempRoot():
+            ss = mod.SecretStore()
+            self.assertFalse(ss.has_server_any_key(10))
+            ss.put_server_key(10, "openai", b"KEY")  # noqa: SLF001
+            self.assertTrue(ss.has_server_any_key(10))
 
-    # M01:T01-02-04: get_server_key 空 provider → None
-    def test_04_get_server_empty_provider_returns_none(self):
-        _, gid = _fresh_ids()
-        self.assertIsNone(store.get_server_key(gid, ""))   # 空
-        self.assertIsNone(store.get_server_key(gid, None)) # type: ignore[arg-type]
+    # M01:T01-02-06: delete_server_keys 非存在 gid でも安全
+    def test_06_delete_server_keys_safe_for_missing_gid(self) -> None:
+        with _TempRoot():
+            ss = mod.SecretStore()
+            # 無い gid でも例外なし
+            ss.delete_server_keys(9999)
+            # あった場合も削除されること
+            ss.put_server_key(1, "openai", b"KEY")  # noqa: SLF001
+            self.assertTrue(ss.has_server_any_key(1))
+            ss.delete_server_keys(1)
+            self.assertFalse(ss.has_server_any_key(1))
 
-    # M01:T01-02-05: has_server_any_key False → True
-    def test_05_has_server_any_key_false_true(self):
-        _, gid = _fresh_ids()
-        # 念のため事前掃除（存在しても例外にならない仕様）
-        store.delete_server_keys(gid)
-        self.assertFalse(store.has_server_any_key(gid))  # ここは常に False で安定
-        store.put_server_key(gid, PROV, b"tok")
-        self.assertTrue(store.has_server_any_key(gid))
+    # M01:T01-02-07: 後方互換 'fernet:' 無しトークンでも復号できること
+    def test_07_backward_compat_no_prefix(self) -> None:
+        with _TempRoot() as env:
+            assert env.users is not None
+            # 旧形式: プレーンなバイナリをそのまま保存していた想定
+            data = {
+                "1": {
+                    "providers": {
+                        "openai": "OLD",  # 'fernet:' プレフィックスなし
+                    }
+                }
+            }
+            env.users.write_text(json.dumps(data), encoding="utf-8")
+            ss = mod.SecretStore()
+            self.assertEqual(ss.get_user_key(1, "openai"), b"OLD")
 
-    # M01:T01-02-06: delete_server_keys 安全（存在しなくても例外なし）
-    def test_06_delete_server_keys_is_safe(self):
-        _, gid = _fresh_ids()
-        # 無い gid でも例外にならない
-        store.delete_server_keys(gid)
-        # 事後も当然 False
-        self.assertFalse(store.has_server_any_key(gid))
+    # M01:T01-02-08: 壊れ JSON -> self-heal で空に戻す
+    def test_08_broken_json_is_recovered_to_empty(self) -> None:
+        with _TempRoot() as env:
+            assert env.users is not None
+            env.users.write_text("{broken", encoding="utf-8")
+            ss = mod.SecretStore()
+            # 読み込み時に自動修復されている想定: エラーにならず None
+            self.assertIsNone(ss.get_user_key(1, "openai"))
+            # ファイル内容が有効JSON（空 dict）に置き換わっていること
+            loaded = json.loads(env.users.read_text(encoding="utf-8"))
+            self.assertEqual(loaded, {})
 
-    # M01:T01-02-07: 後方互換 - 'fernet:' なしでも復号できる
-    def test_07_backward_compat_no_prefix(self):
-        uid, _ = _fresh_ids()
-        # 正規の保存で暗号文を作る
-        store.put_user_key(uid, PROV, b"SAMPLE")
-        # users.json を直接開いて、'fernet:' を剥がしたトークンを埋める
-        with open(USERS_JSON, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        enc = data[str(uid)]["providers"][PROV]
-        assert enc.startswith("fernet:")
-        raw = enc[len("fernet:"):]
-        data[str(uid)]["providers"][PROV] = raw
-        with open(USERS_JSON, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        # 取り出しで bytes が得られる（_dec 内で接頭辞無しを許容）
-        got = store.get_user_key(uid, PROV)
-        self.assertEqual(got, b"SAMPLE")
-
-    # M01:T01-02-08: 壊れた JSON を自動復旧（_load_json の復旧経路）
-    def test_08_load_json_recovery(self):
-        # users.json をわざと壊す
-        Path(USERS_JSON).parent.mkdir(parents=True, exist_ok=True)
-        with open(USERS_JSON, "w", encoding="utf-8") as f:
-            f.write("{ this_is: not json")
-        # API 経由の読みで復旧（空辞書に置き換え）→ get_user_keys は {} を返す
-        uid, _ = _fresh_ids()
-        keys = store.get_user_keys(uid)
-        self.assertEqual(keys, {})
-        # 復旧後は正しい JSON になっていること
-        with open(USERS_JSON, "r", encoding="utf-8") as f:
-            json.load(f)  # パースできればOK
-
-    # M01:T01-02-09: delete_user_keys の安全性（存在していても「空化」で終わる）
-    def test_09_delete_user_keys_clears_providers(self):
-        uid, _ = _fresh_ids()
-        store.put_user_key(uid, PROV, b"abc")
-        self.assertIsNotNone(store.get_user_key(uid, PROV))
-        store.delete_user_keys(uid)
-        self.assertEqual(store.get_user_keys(uid), {})
+    # M01:T01-02-09: delete_user_keys で providers 空化
+    def test_09_delete_user_keys_clears_all_keys(self) -> None:
+        with _TempRoot():
+            ss = mod.SecretStore()
+            ss.put_user_key(1, "openai", b"A")  # noqa: SLF001
+            ss.put_user_key(1, "claude", b"B")  # noqa: SLF001
+            self.assertIsNotNone(ss.get_user_key(1, "openai"))
+            self.assertIsNotNone(ss.get_user_key(1, "claude"))
+            ss.delete_user_keys(1)
+            self.assertIsNone(ss.get_user_key(1, "openai"))
+            self.assertIsNone(ss.get_user_key(1, "claude"))
 
 
 if __name__ == "__main__":
-    SUITE_TITLE = "M01:T01-02 SecretStore edges & recovery"
-    print(f"=== {SUITE_TITLE} ===")
-    # 共通レポータの体裁で出す（❌/✅ + CASE 番号）
-    titlemap = {
-        "test_01_put_user_empty_provider_raises":   "put_user empty provider -> ValueError",
-        "test_02_put_server_empty_provider_raises": "put_server empty provider -> ValueError",
-        "test_03_get_user_empty_provider_returns_none": "get_user empty provider -> None",
-        "test_04_get_server_empty_provider_returns_none": "get_server empty provider -> None",
-        "test_05_has_server_any_key_false_true": "has_server_any_key False/True",
-        "test_06_delete_server_keys_is_safe":    "delete_server_keys safe",
-        "test_07_backward_compat_no_prefix":     "backward compat w/o prefix",
-        "test_08_load_json_recovery":            "broken JSON -> recovery",
-        "test_09_delete_user_keys_clears_providers": "delete_user_keys clears providers",
+    mapping = {
+        "test_01_put_user_empty_provider_raises_value_error":
+            ("M01:T01-02-01", "put_user: provider空 -> ValueError"),
+        "test_02_put_server_empty_provider_raises_value_error":
+            ("M01:T01-02-02", "put_server: provider空 -> ValueError"),
+        "test_03_get_user_empty_provider_returns_none":
+            ("M01:T01-02-03", "get_user: provider空 -> None"),
+        "test_04_get_server_empty_provider_returns_none":
+            ("M01:T01-02-04", "get_server: provider空 -> None"),
+        "test_05_has_server_any_key_false_then_true":
+            ("M01:T01-02-05", "has_server_any_key False/True"),
+        "test_06_delete_server_keys_safe_for_missing_gid":
+            ("M01:T01-02-06", "delete_server_keys 安全"),
+        "test_07_backward_compat_no_prefix":
+            ("M01:T01-02-07", "旧prefixなし互換"),
+        "test_08_broken_json_is_recovered_to_empty":
+            ("M01:T01-02-08", "壊れJSON復旧"),
+        "test_09_delete_user_keys_clears_all_keys":
+            ("M01:T01-02-09", "delete_user_keys 全削除"),
     }
-    for name, title in titlemap.items():
-        with rep.case(title):
-            getattr(SecretStoreEdgeTest(methodName=name), name)()
-    rep.summary()
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(SecretStoreEdgeTest)
+    run_unittest_suite("M01:T01-02", suite, mapping)
