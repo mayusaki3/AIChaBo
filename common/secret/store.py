@@ -118,13 +118,23 @@ class SecretStore:
                     continue
             return out
 
-    def delete_user_keys(self, user_id: int) -> None:
-        """指定ユーザーの全プロバイダ鍵を削除。"""
+    def delete_user_keys(self, user_id: int) -> bool:
+        """指定ユーザーの全プロバイダ鍵を削除し、削除が発生したら True。未存在や変更なしは False。"""
         with self._lock:
             data = self._load_json(USERS_JSON)
-            if str(user_id) in data:
-                data[str(user_id)]["providers"] = {}
-            self._save_json(USERS_JSON, data)
+            uid = str(user_id)
+            node = data.get(uid)
+            if not node:
+                return False
+            providers = node.get("providers") or {}
+            if not providers:
+                return False
+            try:
+                node["providers"] = {}
+                self._save_json(USERS_JSON, data)
+                return True
+            except Exception:
+                return False
 
     # ---- サーバー鍵 API ----------------------------------------------------
 
@@ -165,13 +175,23 @@ class SecretStore:
         """指定サーバーに“復号できる鍵”が1つでもあれば True。"""
         return bool(self.get_server_keys(guild_id))
 
-    def delete_server_keys(self, guild_id: int) -> None:
-        """指定サーバーの全プロバイダ鍵を削除。"""
+    def delete_server_keys(self, guild_id: int) -> bool:
+        """指定サーバーの全プロバイダ鍵を削除し、削除が発生したら True。未存在や変更なしは False。"""
         with self._lock:
             data = self._load_json(SERVERS_JSON)
-            if str(guild_id) in data:
-                data[str(guild_id)]["providers"] = {}
-            self._save_json(SERVERS_JSON, data)
+            gid = str(guild_id)
+            node = data.get(gid)
+            if not node:
+                return False
+            providers = node.get("providers") or {}
+            if not providers:
+                return False
+            try:
+                node["providers"] = {}
+                self._save_json(SERVERS_JSON, data)
+                return True
+            except Exception:
+                return False
 
     # ---- 内部：暗号化/復号 -------------------------------------------------
 
