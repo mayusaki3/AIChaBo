@@ -142,12 +142,21 @@ class SecretStore:
         """指定サーバー×プロバイダの鍵を保存（上書き）。"""
         provider = (provider or "").strip().lower()
         if not provider:
-            raise ValueError("provider is required")
-
+            raise ValueError("provider required")
+        key_bytes = bytes(key_bytes or b"")
         with self._lock:
             data = self._load_json(SERVERS_JSON)
-            node = data.setdefault(str(guild_id), {}).setdefault("providers", {})
-            node[provider] = self._enc(key_bytes)
+            gid = str(guild_id)
+            # ノード正規化: dict以外は作り直す
+            node = data.get(gid)
+            if not isinstance(node, dict):
+                node = {}
+                data[gid] = node
+            providers = node.get("providers")
+            if not isinstance(providers, dict):
+                providers = {}
+                node["providers"] = providers
+            providers[provider] = self._enc(key_bytes)
             self._save_json(SERVERS_JSON, data)
 
     def get_server_key(self, guild_id: int, provider: str) -> Optional[bytes]:
