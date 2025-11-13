@@ -6,19 +6,16 @@
 
 | Suite | 目的（スコープ） | 機能 | モジュール |
 |---|---|---|---|
-| **T01-01** | SecretStore R/W・競合 | R/W / concurrent LWW | `common/secret/store.py` |
-| **T01-02** | SecretStore Edge & Recovery | errors / exists / recovery | `common/secret/store.py` |
-| **T01-03** | SecretStore Init & Errors | env-key / key-gen / chmod-exc / replace-fail | `common/secret/store.py` |
-| **T01-04** | SecretStore Misc Branches   | partial-success / save-ok / dump-error | `common/secret/store.py` |
-| **T02-01** | Auth 解決（opt-in） | resolve empty | `common/chat/auth.py` |
-| **T03-01** | ChatCore モック LLM | provider echo | `ui/discord/services/chat_core.py` |
-| **T04-01** | ChatLoop MOCK | minimal run / provider echo | `common/chat/chat_loop.py` |
-| **T04-02** | ChatLoop Edges | 明示model優先 / policy追加パラメータ透過 / 例外ハンドリング（provider例外→既定メッセージ） | `common/chat/chat_loop.py` |
-| **T04-03** | ChatLoop More Edges | APIキー未設定 / 全メッセージ空白化 / policy=None→既定メッセージ / プロバイダ空文字返却 / プロバイダ関数None→既定メッセージ | `common/chat/chat_loop.py` |
-| **T04-04** | ChatLoop Cover Rest | provider前後空白・大文字許容 / policy={}＋明示model / プロバイダがNone返却→既定メッセージ | `common/chat/chat_loop.py` |
-| **T04-05** | ChatLoop Helper Paths | セッション由来policy→APIキー解決→provider関数呼出の配線を通す（明示model有無パス／extra透過） | `common/chat/chat_loop.py` |
-| **T04-06** | ChatLoop メッセージ正規化 & 直呼び | 文字列→`[{role,content}]` 正規化／既存配列の透過／`policy.chat_fn` 直呼び | `common/chat/chat_loop.py` |
-| **T04-07** | ChatLoop Helpers | セッション方針解決 / APIキー解決 / provider関数解決ヘルパの分岐網羅（ユーザー優先マージ / user→server優先度 / ai.\{provider\} エントリポイント解決） | `common/chat/chat_loop.py` |
+| **T01-01** | Provider 正規化                           | known→canonical / unknown→lower / display labels                                            | `common/chat/provider.py`     |
+| **T02-01** | Auth 解決（opt-in）                       | policy・sessions からの解決（user>server優先, keys 不足時 {}）                              | `common/chat/auth.py`         |
+| **T03-01** | ChatCore モック LLM                        | provider echo・最低限の往復                                                                 | `common/chat/chat_core.py`    |
+| **T04-01** | ChatLoop MOCK                             | empty 固定応答 / invalid-provider 応答 / 最小ハッピーパス                                   | `common/chat/chat_loop.py`    |
+| **T04-02** | ChatLoop Edges                            | 明示 model 優先 / policy の追加パラメータ透過 / provider 例外→既定メッセージ                | `common/chat/chat_loop.py`    |
+| **T04-03** | ChatLoop 更なるエッジ                      | api_key 不足ガイダンス / messages 全空 / policy=None / provider 返り値 None/空              | `common/chat/chat_loop.py`    |
+| **T04-04** | ChatLoop 入力正規化（provider/model）      | provider trim/upper / policy{} + 明示 model / provider 返り値 None の文字列化               | `common/chat/chat_loop.py`    |
+| **T04-05** | ChatLoop セッション経由の方針・上書き       | sessions→policy 抽出 / 明示 model 優先 / 追加引数の透過                                     | `common/chat/chat_loop.py`    |
+| **T04-06** | ChatLoop パス網羅（追加カバレッジ）        | 明示 model 優先 / policy から model / 非文字列→`str()` / 空応答固定文 / provider 例外処理   | `common/chat/chat_loop.py`    |
+| **T04-07** | ChatLoop Helpers                          | 方針解決（user overrides server）/ APIキー解決 / provider 関数解決（`ai.{prov}.*` 参照）    | `common/chat/chat_loop.py`    |
 
 ---
 
@@ -30,102 +27,15 @@
 
 | 番号 | 目的 | 検証内容 | モジュール |
 |---|---|---|---|
-| **T01-01-01** | エイリアス正規化 | known → canonical 変換 | `common/chat/provider.py` |
-| **T01-01-02** | 未知入力処理 | unknown → lower-case | `common/chat/provider.py` |
-| **T01-01-03** | 表示統一 | display label の一致 | `common/chat/provider.py` |
-| **T01-01-04** | 空入力防御 | `display_provider("")` / `display_provider(None)` が空文字を返す | `common/chat/provider.py` |
+| **T01-01-01** | エイリアス正規化 | known エイリアス → canonical 名へ変換      | `common/chat/provider.py`   |
+| **T01-01-02** | 未知入力処理     | unknown 入力 → lower-case 化              | `common/chat/provider.py`   |
+| **T01-01-03** | 表示統一         | display label 一致（canonical 名 → 表示名）| `common/chat/provider.py`   |
+| **T01-01-04** | 表示空入力       | 空入力時の display 名ハンドリング          | `common/chat/provider.py`   |
 
 #### 実行
 
 ```bash
 python -m tests.common.chat.T01_Provider_01_provider_test
-```
-
----
-
-### T01-01 : SecretStore 基本 & LWW
-
-#### ケース
-
-| 番号 | 目的 | 検証内容 | モジュール |
-|---|---|---|---|
-| **T01-01-01** | user key R/W | roundtrip | `common/secret/store.py` |
-| **T01-01-02** | server key R/W | roundtrip | `common/secret/store.py` |
-| **T01-01-03** | LWW（user） | 同時書込 → provider単位 LWW / 破損なし | `common/secret/store.py` |
-| **T01-01-04** | LWW（server） | 同時書込 → provider単位 LWW / 破損なし | `common/secret/store.py` |
-
-#### 実行
-
-```bash
-python -m tests.common.chat.T02_SecretStore_01_store_test
-```
-
----
-
-### T01-02 : SecretStore Edge & Recovery
-
-#### ケース
-
-| 番号 | 目的 | 検証内容 | モジュール |
-|---|---|---|---|
-| **T01-02-01** | 例外系 | `put_user_key("", None)` → ValueError | `common/secret/store.py` |
-| **T01-02-02** | 例外系 | `put_server_key("", None)` → ValueError | `common/secret/store.py` |
-| **T01-02-03** | 空入力分岐 | `get_user_key("", None)` → None | `common/secret/store.py` |
-| **T01-02-04** | 空入力分岐 | `get_server_key("", None)` → None | `common/secret/store.py` |
-| **T01-02-05** | 存在判定 | `has_server_any_key` False→True | `common/secret/store.py` |
-| **T01-02-06** | 削除の安全性 | `delete_server_keys` 非存在 gid でも例外なし | `common/secret/store.py` |
-| **T01-02-07** | 後方互換 | `'fernet:'` 無しトークンでも復号可 | `common/secret/store.py` |
-| **T01-02-08** | 壊れ JSON 復旧 | `_load_json` の self-heal（空で上書き） | `common/secret/store.py` |
-| **T01-02-09** | ユーザー削除 | `delete_user_keys` で providers 空化 | `common/secret/store.py` |
-
-#### 実行
-```bash
-python -m tests.common.chat.T02_SecretStore_02_store_edge_test
-```
-
----
-
-### T01-03 : SecretStore Init & Errors
-
-#### ケース
-| 番号 | 目的 | 検証内容 | モジュール |
-|---|---|---|---|
-| **T01-03-01** | 環境変数鍵 | `AC_MASTER_KEY` 優先（master.key 不生成） | `common/secret/store.py` |
-| **T01-03-02** | 鍵生成＋権限例外 | `master.key` 自動生成 / `os.chmod` 例外経路 | `common/secret/store.py` |
-| **T01-03-03** | JSON 無 | `_load_json`：パス未作成 → `{}` | `common/secret/store.py` |
-| **T01-03-04** | 破損スキップ（user） | 復号不可は `get_user_key=None` / `get_user_keys` から除外 | `common/secret/store.py` |
-| **T01-03-05** | 破損スキップ（server） | `get_server_keys` で正常分のみ残る | `common/secret/store.py` |
-| **T01-03-06** | 未知プロバイダ | `get_server_key` 未登録 provider → `None` | `common/secret/store.py` |
-| **T01-03-07** | 書込み失敗後始末 | `_save_json`：`os.replace` 失敗→`finally` で tmp 削除 | `common/secret/store.py` |
-
-#### 実行
-```bash
-python -m tests.common.chat.T02_SecretStore_03_store_init_test
-```
-
----
-
-### T01-04 : SecretStore Misc Branches
-
-#### ケース
-| 番号 | 目的 | 検証内容 | モジュール |
-|---|---|---|---|
-| **T01-04-01** | user keys 部分成功 | openai=OK / claude=破損 → {"openai":b"OK"} | `common/secret/store.py` |
-| **T01-04-02** | server keys 未登録 | gid 不在 → {} | `common/secret/store.py` |
-| **T01-04-03** | save 正常系 | _save_json 正常、tmp 残らず | `common/secret/store.py` |
-| **T01-04-04** | save 失敗系 | json.dump TypeError → 例外＋tmp 後始末 | `common/secret/store.py` |
-| **T01-04-05** | user key enc 無 | get_user_key: enc 不在 → None（line 109） | `common/secret/store.py` |
-| **T01-04-06** | user keys 削除 | delete_user_keys true 分岐（132-134） | `common/secret/store.py` |
-| **T01-04-07** | JSON 無 | _load_json: パス無 → {}（line 204） | `common/secret/store.py` |
-| **T01-04-08** | 空トークン | _dec("") → ValueError を get_user_key が握り潰す（193） | `common/secret/store.py` |
-| **T01-04-09** | 復旧失敗 | 壊れ JSON ＋ save 失敗 → (213-214) pass | `common/secret/store.py` |
-| **T01-04-10** | 後始末失敗 | _save_json finally で remove 失敗 → (236-237) pass | `common/secret/store.py` |
-| **T01-04-11** | 直接復号例外 | `_dec("")` を直接呼び出し、例外分岐（ValueError）を明示的に踏む | `common/secret/store.py` |
-| **T01-04-12** | 削除の両枝 | `delete_user_keys` の false→true 両パス（未存在→存在時）を網羅 | `common/secret/store.py` |
-
-#### 実行
-```bash
-python -m tests.common.chat.T02_SecretStore_04_store_misc_test
 ```
 
 ---
@@ -189,7 +99,7 @@ python -m tests.common.chat.T03_ChatCore_01_chat_core_test
 | **T04-01-04** | provider ガード | provider="   " → （プロバイダが不正です）を返す | `common/chat/chat_loop.py` |
 
 ```bash
-python -m tests.common.chat.T05_ChatLoop_01_chat_loop_test
+python -m tests.common.chat.T04_ChatLoop_01_chat_loop_test
 ```
 
 ---
@@ -203,7 +113,7 @@ python -m tests.common.chat.T05_ChatLoop_01_chat_loop_test
 | **T04-02-03** | 例外ハンドリング | プロバイダ関数が例外を投げたら `"（チャット実行でエラーが発生しました）"` を返す | `common/chat/chat_loop.py` |
 
 ```bash
-python -m tests.common.chat.T05_ChatLoop_02_chat_loop_edges_test
+python -m tests.common.chat.T04_ChatLoop_02_chat_loop_edges_test
 ```
 
 ---
@@ -219,7 +129,7 @@ python -m tests.common.chat.T05_ChatLoop_02_chat_loop_edges_test
 | **T04-03-05** | 関数取得失敗 | `_get_provider_chat_fn` が `None` → 例外ハンドリング文言 | `common/chat/chat_loop.py` |
 
 ```bash
-python -m tests.common.chat.T05_ChatLoop_03_chat_loop_more_edges_test
+python -m tests.common.chat.T04_ChatLoop_03_chat_loop_more_edges_test
 ```
 
 ---
@@ -233,7 +143,7 @@ python -m tests.common.chat.T05_ChatLoop_03_chat_loop_more_edges_test
 | **T04-04-03** | ChatLoop cover rest | provider returns None → `"None"`（stringify 挙動を検証） | `common/chat/chat_loop.py` |
 
 ```bash
-python -m tests.common.chat.T05_ChatLoop_04_chat_loop_cover_rest_test
+python -m tests.common.chat.T04_ChatLoop_04_chat_loop_cover_rest_test
 ```
 
 ---
@@ -247,7 +157,7 @@ python -m tests.common.chat.T05_ChatLoop_04_chat_loop_cover_rest_test
 
 
 ```bash
-python -m tests.common.chat.T05_ChatLoop_05_chat_loop_helper_paths_test
+python -m tests.common.chat.T04_ChatLoop_05_chat_loop_helper_paths_test
 ```
 
 ---
@@ -256,12 +166,14 @@ python -m tests.common.chat.T05_ChatLoop_05_chat_loop_helper_paths_test
 
 | 番号 | 目的 | 検証内容 | モジュール |
 |---|---|---|---|
- **T04-06-01** | ChatLoop paths cover | message を文字列で与えた場合に `{'role':'user'}` へ正規化される | `common/chat/chat_loop.py` |
-| **T04-06-02** | ChatLoop paths cover | 既に `[{role, content}]` 形式の配列はそのまま通過する | `common/chat/chat_loop.py` |
-| **T04-06-03** | ChatLoop paths cover | `policy.chat_fn` 指定時に provider マップをバイパスして直呼びされる | `common/chat/chat_loop.py` |
+| **T04-06-01** | ChatLoop paths cover | policyに明示モデルがある場合、そのモデルが優先される | `common/chat/chat_loop.py` |
+| **T04-06-02** | ChatLoop paths cover | policyにモデルが無い場合、デフォルトモデルが適用される | `common/chat/chat_loop.py` |
+| **T04-06-03** | ChatLoop paths cover | providerから非文字列が返る場合は `str()` 変換される | `common/chat/chat_loop.py` |
+| **T04-06-04** | ChatLoop paths cover | 空文字や空応答のとき `（応答が空でした）` と返す | `common/chat/chat_loop.py` |
+| **T04-06-05** | ChatLoop paths cover | providerが例外を投げた場合にエラーメッセージを返す | `common/chat/chat_loop.py` |
 
 ```bash
-python -m tests.common.chat.T05_ChatLoop_06_chat_loop_paths_cover_test
+python -m tests.common.chat.T04_ChatLoop_06_chat_loop_paths_cover_test
 ```
 
 ---
@@ -281,7 +193,7 @@ python -m tests.common.chat.T05_ChatLoop_06_chat_loop_paths_cover_test
 | **T04-07-09** | APIキー解決(guildのみ/鍵無し) | `_resolve_api_key` が guild_idありで server_key=None の場合に None を返す | `common/chat/chat_loop.py` |
 
 ```bash
-python -m tests.common.chat.T05_ChatLoop_07_chat_loop_helpers_test
+python -m tests.common.chat.T04_ChatLoop_07_chat_loop_helpers_test
 ```
 
 ---

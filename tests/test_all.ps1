@@ -31,7 +31,7 @@ coverage run -a -m tests.common.chat.T04_ChatLoop_06_chat_loop_paths_cover_test
 coverage run -a -m tests.common.chat.T04_ChatLoop_07_chat_loop_helpers_test
 
 # T05 : common/chat/message.py
-# coverage run -a -m tests.common.chat.T05_Message_01_message_test
+coverage run -a -m tests.common.chat.T05_Message_01_message_test
 
 # T06 : common/chat/
 # coverage run -a -m tests.common.chat.T06_Context_01_context_test
