@@ -1,6 +1,6 @@
-# tests/T05_ChatLoop_01_chat_loop_test.py
+# tests/T04_ChatLoop_01_chat_loop_test.py
 # ------------------------------------------------------------
-# T05-01 : ChatLoop 基本
+# T04-01 : ChatLoop 基本
 # 対象: common/chat/chat_loop.py の async run()
 # 目的:
 #  - 空入力 → "（入力が空です）"
@@ -10,9 +10,9 @@
 # 依存:
 #  - USM/SSM/SecretStore/AI 実体には依存させず、内部ヘルパを patch して検証
 # 実行:
-#  - python -m tests.T05_ChatLoop_01_chat_loop_test
+#  - python -m tests.T04_ChatLoop_01_chat_loop_test
 # 出力:
-#  - ✅/❌ [T05-01-xx] ... と --- SUMMARY T05-01: ... --- を共通レポータで統一
+#  - ✅/❌ [T04-01-xx] ... と --- SUMMARY T04-01: ... --- を共通レポータで統一
 # ------------------------------------------------------------
 import asyncio
 import unittest
@@ -25,10 +25,10 @@ from common.chat.chat_loop import run as chat_run
 class ChatLoopBasicTest(unittest.TestCase):
     """
     ケース設計
-      T05-01-01: 空入力 → 固定文言
-      T05-01-02: model 未解決（引数 None & policy も空）→ ガイダンス
-      T05-01-03: 正常系（policy で model 補完、api_key 解決、AI呼出→応答文字列）
-      T05-01-04: provider 不正（空/空白）→ 固定文言
+      T04-01-01: 空入力 → 固定文言
+      T04-01-02: model 未解決（引数 None & policy も空）→ ガイダンス
+      T04-01-03: 正常系（policy で model 補完、api_key 解決、AI呼出→応答文字列）
+      T04-01-04: provider 不正（空/空白）→ 固定文言
     """
 
     def test_01_empty_input_returns_fixed_message(self):
@@ -88,9 +88,9 @@ class ChatLoopBasicTest(unittest.TestCase):
 if __name__ == "__main__":
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ChatLoopBasicTest)
     mapping = {
-        "test_01_empty_input_returns_fixed_message": ("T05-01-01", "empty -> fixed message"),
-        "test_02_missing_model_message":             ("T05-01-02", "missing model -> guidance"),
-        "test_03_happy_path_with_patched_env":       ("T05-01-03", "happy path (patched)"),
-        "test_04_invalid_provider_message":          ("T05-01-04", "invalid provider -> message"),
+        "test_01_empty_input_returns_fixed_message": ("M02:T04-01-01", "empty -> fixed message"),
+        "test_02_missing_model_message":             ("M02:T04-01-02", "missing model -> guidance"),
+        "test_03_happy_path_with_patched_env":       ("M02:T04-01-03", "happy path (patched)"),
+        "test_04_invalid_provider_message":          ("M02:T04-01-04", "invalid provider -> message"),
     }
-    run_unittest_suite("T05-01", suite, mapping)
+    run_unittest_suite("M02:T04-01", suite, mapping)

@@ -1,12 +1,12 @@
-# tests/T05_ChatLoop_02_chat_loop_edges_test.py
+# tests/T04_ChatLoop_02_chat_loop_edges_test.py
 # ------------------------------------------------------------
-# T05-02 : ChatLoop edges
+# T04-02 : ChatLoop edges
 # 目的:
 #  - 明示 model が policy より優先されること
 #  - policy の追加パラメータ(temperature 等)がプロバイダ関数に透過されること
 #  - 例外発生時に既定メッセージ "（チャット実行でエラーが発生しました）" を返すこと
 # 実装依存はモックで吸収（USM/SSM/SecretStore/プロバイダ呼び出し）
-# 実行: python -m tests.T05_ChatLoop_02_chat_loop_edges_test
+# 実行: python -m tests.T04_ChatLoop_02_chat_loop_edges_test
 # ------------------------------------------------------------
 import asyncio
 import unittest
@@ -82,8 +82,8 @@ class ChatLoopEdgesTest(unittest.TestCase):
 if __name__ == "__main__":
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ChatLoopEdgesTest)
     mapping = {
-        "test_01_explicit_model_overrides_policy": ("T05-02-01", "explicit model overrides policy"),
-        "test_02_extra_params_passthrough":        ("T05-02-02", "extra params passthrough"),
-        "test_03_provider_fn_raises_is_handled":   ("T05-02-03", "provider fn raises -> handled"),
+        "test_01_explicit_model_overrides_policy": ("M02:T04-02-01", "explicit model overrides policy"),
+        "test_02_extra_params_passthrough":        ("M02:T04-02-02", "extra params passthrough"),
+        "test_03_provider_fn_raises_is_handled":   ("M02:T04-02-03", "provider fn raises -> handled"),
     }
-    run_unittest_suite("T05-02", suite, mapping)
+    run_unittest_suite("M02:T04-02", suite, mapping)

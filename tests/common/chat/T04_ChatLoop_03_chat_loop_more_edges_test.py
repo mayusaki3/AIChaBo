@@ -1,11 +1,11 @@
-# T05-03 : ChatLoop more edges
+# T04-03 : ChatLoop more edges
 # 目的:
 #  - APIキー未設定枝
 #  - 全メッセージ空白化枝（前処理後に空）
 #  - policy None/空辞書枝
 #  - provider 関数が空文字返却
 #  - provider 関数取得失敗(None) → 例外ハンドリング枝
-# 実行: python -m tests.T05_ChatLoop_03_chat_loop_more_edges_test
+# 実行: python -m tests.T04_ChatLoop_03_chat_loop_more_edges_test
 import asyncio
 import unittest
 from unittest.mock import patch
@@ -109,10 +109,10 @@ class ChatLoopMoreEdgesTest(unittest.TestCase):
 if __name__ == "__main__":
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ChatLoopMoreEdgesTest)
     mapping = {
-        "test_01_apikey_missing":            ("T05-03-01", "apikey missing -> guidance"),
-        "test_02_all_messages_become_empty": ("T05-03-02", "all messages empty -> fixed message"),
-        "test_03_policy_none_returns_error_message": ("T05-03-03", "policy=None -> default error message"),
-        "test_04_provider_returns_empty_string": ("T05-03-04", "provider returns empty string"),
-        "test_05_provider_fn_is_none":       ("T05-03-05", "provider fn None -> handled"),
+        "test_01_apikey_missing":                    ("M02:T04-03-01", "apikey missing -> guidance"),
+        "test_02_all_messages_become_empty":         ("M02:T04-03-02", "all messages empty -> fixed message"),
+        "test_03_policy_none_returns_error_message": ("M02:T04-03-03", "policy=None -> default error message"),
+        "test_04_provider_returns_empty_string":     ("M02:T04-03-04", "provider returns empty string"),
+        "test_05_provider_fn_is_none":               ("M02:T04-03-05", "provider fn None -> handled"),
     }
-    run_unittest_suite("T05-03", suite, mapping)
+    run_unittest_suite("M02:T04-03", suite, mapping)

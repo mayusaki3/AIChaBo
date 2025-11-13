@@ -1,4 +1,4 @@
-# tests/T05_ChatLoop_05_chat_loop_helper_paths_test.py
+# tests/T04_ChatLoop_05_chat_loop_helper_paths_test.py
 import unittest
 import asyncio
 from unittest.mock import patch
@@ -6,7 +6,7 @@ from tests._report import run_unittest_suite
 from common.chat.chat_loop import run as chat_run
 
 """
-=== T05-05 : ChatLoop Helper Paths ===
+=== T04-05 : ChatLoop Helper Paths ===
 狙い（実装に追従）:
 - chat_loop 側の “ヘルパー実装” 名称に合わせて patch 対象を更新
   * _extract_chat_policy_from_sessions : セッションから policy を集約
@@ -21,7 +21,7 @@ class ChatLoopHelperPathsTest(unittest.TestCase):
 
     def test_01_policy_via_sessions_and_chat_core_called(self):
         """
-        [T05-05-01] セッション由来の policy（model=m-from-policy）を用い、
+        [T04-05-01] セッション由来の policy（model=m-from-policy）を用い、
         _resolve_api_key が呼ばれ(K)を返し、_get_provider_chat_fn が返す関数経由で
         実行できることを確認。model は「明示指定なし→policyのmodel」を使うルート。
         """
@@ -48,7 +48,7 @@ class ChatLoopHelperPathsTest(unittest.TestCase):
 
     def test_02_helper_builds_chat_fn_with_explicit_model_override(self):
         """
-        [T05-05-02] 明示 model が policy の model を上書きする経路。
+        [T04-05-02] 明示 model が policy の model を上書きする経路。
         provider の正規化や extra パラメータの受け渡しも通ることを確認。
         """
         async def fake_provider_chat(context_list, api_key, model, **kw):
@@ -76,7 +76,7 @@ class ChatLoopHelperPathsTest(unittest.TestCase):
 if __name__ == "__main__":
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ChatLoopHelperPathsTest)
     mapping = {
-        "test_01_policy_via_sessions_and_chat_core_called": ("T05-05-01", "policy via sessions → provider chat called"),
-        "test_02_helper_builds_chat_fn_with_explicit_model_override": ("T05-05-02", "explicit model overrides policy; extra passthrough"),
+        "test_01_policy_via_sessions_and_chat_core_called":           ("M02:T04-05-01", "policy via sessions → provider chat called"),
+        "test_02_helper_builds_chat_fn_with_explicit_model_override": ("M02:T04-05-02", "explicit model overrides policy; extra passthrough"),
     }
-    run_unittest_suite("T05-05", suite, mapping)
+    run_unittest_suite("M02:T04-05", suite, mapping)

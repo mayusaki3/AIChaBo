@@ -22,13 +22,13 @@ Remove-Item Env:AIChaBo_TEST_ENABLE_AUTH_RESOLVE
 coverage run -a -m tests.common.chat.T03_ChatCore_01_chat_core_test
 
 # T04 : common/chat/chat_loop.py
-# coverage run -a -m tests.common.chat.T04_ChatLoop_01_chat_loop_test
-# coverage run -a -m tests.common.chat.T04_ChatLoop_02_chat_loop_edges_test
-# coverage run -a -m tests.common.chat.T04_ChatLoop_03_chat_loop_more_edges_test
-# coverage run -a -m tests.common.chat.T04_ChatLoop_04_chat_loop_cover_rest_test
-# coverage run -a -m tests.common.chat.T04_ChatLoop_05_chat_loop_helper_paths_test
-# coverage run -a -m tests.common.chat.T04_ChatLoop_06_chat_loop_paths_cover_test
-# coverage run -a -m tests.common.chat.T04_ChatLoop_07_chat_loop_helpers_test
+coverage run -a -m tests.common.chat.T04_ChatLoop_01_chat_loop_test
+coverage run -a -m tests.common.chat.T04_ChatLoop_02_chat_loop_edges_test
+coverage run -a -m tests.common.chat.T04_ChatLoop_03_chat_loop_more_edges_test
+coverage run -a -m tests.common.chat.T04_ChatLoop_04_chat_loop_cover_rest_test
+coverage run -a -m tests.common.chat.T04_ChatLoop_05_chat_loop_helper_paths_test
+coverage run -a -m tests.common.chat.T04_ChatLoop_06_chat_loop_paths_cover_test
+coverage run -a -m tests.common.chat.T04_ChatLoop_07_chat_loop_helpers_test
 
 # T05 : common/chat/message.py
 # coverage run -a -m tests.common.chat.T05_Message_01_message_test

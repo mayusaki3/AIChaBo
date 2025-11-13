@@ -1,6 +1,6 @@
-# T05-04 : ChatLoop cover rest branches
+# T04-04 : ChatLoop cover rest branches
 # 狙い: chat_loop.py の未到達(14–27, 34–43, 51–59, 101)をコード変更なしでテスト到達
-# 実行: python -m tests.T05_ChatLoop_04_chat_loop_cover_rest_test
+# 実行: python -m tests.T04_ChatLoop_04_chat_loop_cover_rest_test
 
 import asyncio
 import unittest
@@ -17,7 +17,7 @@ MSG_PROVIDER_ERROR = "（チャット実行でエラーが発生しました）"
 class ChatLoopCoverRestTest(unittest.TestCase):
     def test_01_provider_trim_and_upper_is_valid(self):
         """
-        [T05-04-01] provider 前処理の枝:
+        [T04-04-01] provider 前処理の枝:
         '  OPENAI  '（前後空白 + 大文字）でも有効として処理されることを確認。
         - policy は model を持つ正常ケース
         - APIキーは存在
@@ -44,8 +44,8 @@ class ChatLoopCoverRestTest(unittest.TestCase):
 
     def test_02_policy_empty_dict_with_explicit_model(self):
         """
-        [T05-04-02] policy が空辞書 {} の枝:
-        - policy=None は T05-03-03 で「既定エラーメッセージ」に落ちる仕様だが、
+        [T04-04-02] policy が空辞書 {} の枝:
+        - policy=None は T04-03-03 で「既定エラーメッセージ」に落ちる仕様だが、
           policy={} は None とは別枝。model は引数側で明示指定し正常完了させる。
         期待: "ok:explicit"
         """
@@ -68,7 +68,7 @@ class ChatLoopCoverRestTest(unittest.TestCase):
 
     def test_03_provider_returns_none_is_stringified(self):
         """
-        [T05-04-03] 戻り値後処理の枝（現行仕様）:
+        [T04-04-03] 戻り値後処理の枝（現行仕様）:
         - provider 関数が None を返すと、str(None) → "None" として返る仕様
         期待: "None"
         """
@@ -94,9 +94,9 @@ if __name__ == "__main__":
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ChatLoopCoverRestTest)
     # レポータ表示用マッピング（順序固定: test_01 → test_02 → test_03）
     mapping = {
-        "test_01_provider_trim_and_upper_is_valid":        ("T05-04-01", "provider trim/upper is valid"),
-        "test_02_policy_empty_dict_with_explicit_model":   ("T05-04-02", "policy {} + explicit model"),
-        "test_03_provider_returns_none_is_stringified":    ("T05-04-03", 'provider returns None -> "None" string'),
+        "test_01_provider_trim_and_upper_is_valid":        ("M02:T04-04-01", "provider trim/upper is valid"),
+        "test_02_policy_empty_dict_with_explicit_model":   ("M02:T04-04-02", "policy {} + explicit model"),
+        "test_03_provider_returns_none_is_stringified":    ("M02:T04-04-03", 'provider returns None -> "None" string'),
     }
     from tests._report import run_unittest_suite
-    run_unittest_suite("T05-04", suite, mapping)
+    run_unittest_suite("M02:T04-04", suite, mapping)
