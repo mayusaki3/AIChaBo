@@ -16,6 +16,10 @@
 | **T04-05** | ChatLoop セッション経由の方針・上書き       | sessions→policy 抽出 / 明示 model 優先 / 追加引数の透過                                     | `common/chat/chat_loop.py`    |
 | **T04-06** | ChatLoop パス網羅（追加カバレッジ）        | 明示 model 優先 / policy から model / 非文字列→`str()` / 空応答固定文 / provider 例外処理   | `common/chat/chat_loop.py`    |
 | **T04-07** | ChatLoop Helpers                          | 方針解決（user overrides server）/ APIキー解決 / provider 関数解決（`ai.{prov}.*` 参照）    | `common/chat/chat_loop.py`    |
+| **T05-01** | Message Utility | メッセージ正規化・role補完・結合ユーティリティ（正常／異常／境界値） | `common/chat/message.py` |
+| **T06-01** | TextSplit Utility | 長文分割処理（最大長・文単位・多言語・特殊ケース） | `common/chat/textsplit.py` |
+| **T07-01** | Continuation Flow | 会話継続（履歴＋入力→応答生成）・textsplit連携・例外処理・分岐網羅 | `common/chat/continuation.py` |
+| **T08-01** | Sharing Session | セッション共有（export/import/guild共有/互換）・冪等性・サニタイズ | `common/chat/sharing.py` |
 
 ---
 
@@ -194,6 +198,79 @@ python -m tests.common.chat.T04_ChatLoop_06_chat_loop_paths_cover_test
 
 ```bash
 python -m tests.common.chat.T04_ChatLoop_07_chat_loop_helpers_test
+```
+
+---
+
+### T05-01 : Message Utility
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T05-01-01** | 文字列の正規化 | `"hello"` → `[{'role':'user','content':'hello'}]` | `common/chat/message.py` |
+| **T05-01-02** | 既存配列の透過 | 既に `[{role,content}]` 配列は構造維持で返却 | `common/chat/message.py` |
+| **T05-01-03** | 不正型ガード | `None` / 数値 / dict を渡すと `ValueError` | `common/chat/message.py` |
+| **T05-01-04** | 空文字の扱い | `""` は空要素として許容または明示エラー（実装に追従） | `common/chat/message.py` |
+| **T05-01-05** | role 既定値 | role 未指定要素に `'user'` を補完 | `common/chat/message.py` |
+| **T05-01-06** | トリム規則 | content 前後空白の扱い（保持/除去は実装に追従） | `common/chat/message.py` |
+| **T05-01-07** | 結合ユーティリティ | 複数要素の結合（区切り文字・改行含む） | `common/chat/message.py` |
+| **T05-01-08** | 破損要素スキップ | 欠落 `content` 要素をスキップ | `common/chat/message.py` |
+
+```bash
+python -m tests.common.chat.T05_Message_01_message_test
+```
+
+---
+### T06-01 : TextSplit Utility
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T06-01-01** | 基本分割 | `max_chars=50` で適切にチャンク化 | `common/chat/textsplit.py` |
+| **T06-01-02** | 文単位分割（和文） | `split_sentences=True` で「。！？…」区切り | `common/chat/textsplit.py` |
+| **T06-01-03** | 文単位分割（英文） | `split_sentences=True` で「.!?」区切り | `common/chat/textsplit.py` |
+| **T06-01-04** | 改行混在 | 改行・空行を保ったまま分割（実装に追従） | `common/chat/textsplit.py` |
+| **T06-01-05** | 超長単語 | `max_chars` 未満に収まらない単語を分割 | `common/chat/textsplit.py` |
+| **T06-01-06** | 空文字 | `""` → `[""]` または `[]`（実装に追従） | `common/chat/textsplit.py` |
+| **T06-01-07** | 無効パラメータ | `max_chars<=0` 等で `ValueError` | `common/chat/textsplit.py` |
+| **T06-01-08** | 末尾境界 | 末尾が区切り文字で終わるケースの扱い | `common/chat/textsplit.py` |
+
+```bash
+python -m tests.common.chat.T06_TextSplit_01_textsplit_test
+```
+
+---
+### T07-01 : Continuation Flow
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T07-01-01** | 空コンテキスト | 履歴・入力いずれも空 → 既定応答（実装に追従） | `common/chat/continuation.py` |
+| **T07-01-02** | 正常継続 | 履歴＋新規入力からプロンプト合成→モック応答 | `common/chat/continuation.py` |
+| **T07-01-03** | 例外握り潰し | provider 例外をログ＋固定メッセージ | `common/chat/continuation.py` |
+| **T07-01-04** | 長文継続 | 新規入力が長文→`textsplit` 経由で複数回呼び出し | `common/chat/continuation.py` |
+| **T07-01-05** | policy 直呼び | `policy.chat_fn` 指定時に provider マップをバイパス | `common/chat/continuation.py` |
+| **T07-01-06** | メッセージ正規化 | `message.py` 正規化が呼ばれることを確認 | `common/chat/continuation.py` |
+| **T07-01-07** | ステップ上限 | `max_steps` 超過時の打ち切り | `common/chat/continuation.py` |
+| **T07-01-08** | None 応答 | provider が `None` を返す→ `str(None)` or 既定値 | `common/chat/continuation.py` |
+
+```bash
+python -m tests.common.chat.T07_Continuation_01_continuation_test
+```
+
+---
+### T08-01 : Sharing Session
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T08-01-01** | export 基本 | user セッションを JSON(dict) 化、必須キー確認 | `common/chat/sharing.py` |
+| **T08-01-02** | import 基本 | JSON からセッション再構築（id/ts/messages 等） | `common/chat/sharing.py` |
+| **T08-01-03** | guild 共有 | user→guild への共有登録（上書き・追記を含む） | `common/chat/sharing.py` |
+| **T08-01-04** | 不正 JSON | 欠落/型不整合→安全に失敗（例外抑止 or None） | `common/chat/sharing.py` |
+| **T08-01-05** | 冪等性 | 同一 JSON の再 import は差分なし | `common/chat/sharing.py` |
+| **T08-01-06** | サニタイズ | 余剰フィールドは無視／既知のみ採用 | `common/chat/sharing.py` |
+| **T08-01-07** | バージョン互換 | schema version 不一致時の扱い（互換/拒否） | `common/chat/sharing.py` |
+| **T08-01-08** | 部分共有 | 特定会話のみ共有対象に含める | `common/chat/sharing.py` |
+
+```bash
+python -m tests.common.chat.T08_Sharing_01_sharing_test
 ```
 
 ---
