@@ -174,7 +174,7 @@ Remove-Item Env:AIChaBo_TEST_ENABLE_AUTH_RESOLVE
 | **T03-01-06** | chat_fn 注入 | `send_once(..., chat_fn=...)` で注入関数が呼ばれ、`provider/model/text` が正しく引数で渡ることを検証 | `common/chat/chat_core.py` |
 
 ```bash
-python -m tests.common.chat.T04_ChatCore_01_chat_core_test
+python -m tests.common.chat.T03_ChatCore_01_chat_core_test
 ```
 
 ---

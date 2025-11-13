@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-T03_Auth_01_auth_resolve_test.py
+T02_Auth_01_auth_resolve_test.py
 目的: resolve_auth_and_key() の主要分岐を網羅テスト（opt-in）
 実行例:
   # bash/zsh
   export AIChaBo_TEST_ENABLE_AUTH_RESOLVE=1
-  python -m tests.T03_Auth_01_auth_resolve_test
+  python -m tests.T02_Auth_01_auth_resolve_test
   unset AIChaBo_TEST_ENABLE_AUTH_RESOLVE
 
   # PowerShell
   $env:AIChaBo_TEST_ENABLE_AUTH_RESOLVE=1
-  python -m tests.T03_Auth_01_auth_resolve_test
+  python -m tests.T02_Auth_01_auth_resolve_test
   Remove-Item Env:AIChaBo_TEST_ENABLE_AUTH_RESOLVE
 """
 import os
@@ -63,7 +63,7 @@ class AuthResolveTest(unittest.TestCase):
         AUTH_MOD.SSM = self._SSM
         AUTH_MOD.store = self._STORE
 
-    # [T03-01-01] 未登録時は {} を返す（ベースライン）
+    # [T02-01-01] 未登録時は {} を返す（ベースライン）
     def test_01_resolve_without_any_auth(self):
         AUTH_MOD.USM = _mk_usm(chat={})
         AUTH_MOD.SSM = _mk_ssm(chat={})
@@ -71,7 +71,7 @@ class AuthResolveTest(unittest.TestCase):
         got = resolve_auth_and_key(user_id=123, guild_id=456)
         self.assertEqual(got, {})
 
-    # [T03-01-02] USMにprovider/modelはあるがAPIキー未登録 -> {}
+    # [T02-01-02] USMにprovider/modelはあるがAPIキー未登録 -> {}
     def test_02_usm_config_no_keys(self):
         AUTH_MOD.USM = _mk_usm(chat={"provider": "OpenAI", "model": "gpt-4o-mini"})
         AUTH_MOD.SSM = _mk_ssm(chat={})
@@ -79,7 +79,7 @@ class AuthResolveTest(unittest.TestCase):
         got = resolve_auth_and_key(user_id=111, guild_id=222)
         self.assertEqual(got, {})
 
-    # [T03-01-03] ユーザーキー優先で解決（max_tokens デフォルト付与）
+    # [T02-01-03] ユーザーキー優先で解決（max_tokens デフォルト付与）
     def test_03_resolve_with_user_key(self):
         AUTH_MOD.USM = _mk_usm(chat={"provider": "OpenAI", "model": "gpt-4o-mini"})
         AUTH_MOD.SSM = _mk_ssm(chat={})
@@ -90,7 +90,7 @@ class AuthResolveTest(unittest.TestCase):
         self.assertEqual(got.get("api_key"), "USERKEY")
         self.assertEqual(got.get("max_tokens"), 2048)     # 既定値
 
-    # [T03-01-04] ユーザーにキー無し・サーバーにあり → サーバーキーで解決
+    # [T02-01-04] ユーザーにキー無し・サーバーにあり → サーバーキーで解決
     def test_04_resolve_with_server_key_fallback(self):
         AUTH_MOD.USM = _mk_usm(chat={"provider": "OpenAI", "model": "gpt-4o-mini"})
         AUTH_MOD.SSM = _mk_ssm(chat={"provider": "IGNORED", "model": "IGNORED"})
@@ -99,7 +99,7 @@ class AuthResolveTest(unittest.TestCase):
         self.assertEqual(got.get("provider"), "openai")
         self.assertEqual(got.get("api_key"), "SVRKEY")
 
-    # [T03-01-05] provider は大文字/別表記でも normalize → SecretStore の小文字キーに一致
+    # [T02-01-05] provider は大文字/別表記でも normalize → SecretStore の小文字キーに一致
     def test_05_provider_normalize_to_secretstore_key(self):
         AUTH_MOD.USM = _mk_usm(chat={"provider": "OPENAI", "model": "gpt-4o-mini"})
         AUTH_MOD.SSM = _mk_ssm(chat={})
@@ -108,7 +108,7 @@ class AuthResolveTest(unittest.TestCase):
         self.assertEqual(got.get("provider"), "openai")
         self.assertEqual(got.get("api_key"), "X")
 
-    # [T03-01-06] model 欠落 → {}
+    # [T02-01-06] model 欠落 → {}
     def test_06_missing_model(self):
         AUTH_MOD.USM = _mk_usm(chat={"provider": "OpenAI"})
         AUTH_MOD.SSM = _mk_ssm(chat={})
@@ -116,7 +116,7 @@ class AuthResolveTest(unittest.TestCase):
         got = resolve_auth_and_key(user_id=1, guild_id=2)
         self.assertEqual(got, {})
 
-    # [T03-01-07] USM になければ SSM の非機密を採用して解決
+    # [T02-01-07] USM になければ SSM の非機密を採用して解決
     def test_07_ssm_used_when_usm_absent(self):
         AUTH_MOD.USM = _mk_usm(chat={})  # 実質なし
         AUTH_MOD.SSM = _mk_ssm(chat={"provider": "OpenAI", "model": "gpt-4o-mini"})
@@ -127,13 +127,14 @@ class AuthResolveTest(unittest.TestCase):
 
 if __name__ == "__main__":
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(AuthResolveTest)
+    # 正式番号: M02（common/chat） > T02-01（Auth）
     mapping = {
-        "test_01_resolve_without_any_auth": ("T03-01-01", "resolve without any auth"),
-        "test_02_usm_config_no_keys": ("T03-01-02", "USM provider/model but no keys -> {}"),
-        "test_03_resolve_with_user_key": ("T03-01-03", "user key preferred"),
-        "test_04_resolve_with_server_key_fallback": ("T03-01-04", "fallback to server key"),
-        "test_05_provider_normalize_to_secretstore_key": ("T03-01-05", "provider normalize -> secretstore key"),
-        "test_06_missing_model": ("T03-01-06", "missing model -> {}"),
-        "test_07_ssm_used_when_usm_absent": ("T03-01-07", "use SSM when USM absent"),
+        "test_01_resolve_without_any_auth": ("M02:T02-01-01", "resolve without any auth"),
+        "test_02_usm_config_no_keys":      ("M02:T02-01-02", "USM provider/model but no keys -> {}"),
+        "test_03_resolve_with_user_key":   ("M02:T02-01-03", "user key preferred"),
+        "test_04_resolve_with_server_key_fallback": ("M02:T02-01-04", "fallback to server key"),
+        "test_05_provider_normalize_to_secretstore_key": ("M02:T02-01-05", "provider normalize -> secretstore key"),
+        "test_06_missing_model":           ("M02:T02-01-06", "missing model -> {}"),
+        "test_07_ssm_used_when_usm_absent":("M02:T02-01-07", "use SSM when USM absent"),
     }
-    run_unittest_suite("T03-01", suite, mapping)
+    run_unittest_suite("M02:T02-01", suite, mapping)

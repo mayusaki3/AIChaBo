@@ -1,12 +1,12 @@
-# tests/T04_ChatCore_01_chat_core_test.py
+# tests/T03_ChatCore_01_chat_core_test.py
 # ------------------------------------------------------------
-# T04-01 : ChatCore 基本
+# T03-01 : ChatCore 基本
 # 目的:
 #  - guard(empty)、provider/model 必須、最小往復（モック/実装状況に応じて Skip）
 # 出力:
-#  - ✅/❌ [T04-01-xx] ... と --- SUMMARY T04-01: ... --- を共通レポータで統一
+#  - ✅/❌ [T03-01-xx] ... と --- SUMMARY T03-01: ... --- を共通レポータで統一
 # 実行:
-#  - python -m tests.T04_ChatCore_01_chat_core_test
+#  - python -m tests.T03_ChatCore_01_chat_core_test
 # ------------------------------------------------------------
 import unittest
 
@@ -22,9 +22,9 @@ except Exception:
 class ChatCoreBasicTest(unittest.TestCase):
     """
     ケース設計
-      T04-01-01: 入力ガード（空文字/空白のみ → 例外 or 既定応答）
-      T04-01-02: provider/model 必須（欠落時は例外）
-      T04-01-03: 最小往復（モック差し替え未整備なら Skip）
+      T03-01-01: 入力ガード（空文字/空白のみ → 例外 or 既定応答）
+      T03-01-02: provider/model 必須（欠落時は例外）
+      T03-01-03: 最小往復（モック差し替え未整備なら Skip）
     """
 
     def test_01_guard_empty_text(self):
@@ -93,12 +93,13 @@ class ChatCoreBasicTest(unittest.TestCase):
 
 if __name__ == "__main__":
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ChatCoreBasicTest)
+    # 正式番号: M02（common/chat） > T03-01（ChatCore）
     mapping = {
-        "test_01_guard_empty_text":          ("T04-01-01", "guard(empty)"),
-        "test_02_require_provider_model":    ("T04-01-02", "require provider/model"),
-        "test_03_basic_roundtrip_with_mock": ("T04-01-03", "roundtrip with mock (minimal)"),
-        "test_04_guard_non_str_input":       ("T04-01-04", "guard(non-str)"),
-        "test_05_echo_without_chat_fn":      ("T04-01-05", "echo without chat_fn"),
-        "test_06_chat_fn_injection_is_called": ("T04-01-06", "chat_fn injection is called"),
+        "test_01_guard_empty_text":            ("M02:T03-01-01", "guard(empty)"),
+        "test_02_require_provider_model":      ("M02:T03-01-02", "require provider/model"),
+        "test_03_basic_roundtrip_with_mock":   ("M02:T03-01-03", "roundtrip with mock (minimal)"),
+        "test_04_guard_non_str_input":         ("M02:T03-01-04", "guard(non-str)"),
+        "test_05_echo_without_chat_fn":        ("M02:T03-01-05", "echo without chat_fn"),
+        "test_06_chat_fn_injection_is_called": ("M02:T03-01-06", "chat_fn injection is called"),
     }
-    run_unittest_suite("T04-01", suite, mapping)
+    run_unittest_suite("M02:T03-01", suite, mapping)
