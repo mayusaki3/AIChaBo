@@ -18,7 +18,9 @@
 | **T04-07** | ChatLoop Helpers                          | 方針解決（user overrides server）/ APIキー解決 / provider 関数解決（`ai.{prov}.*` 参照）    | `common/chat/chat_loop.py`    |
 | **T05-01** | Message Utility | メッセージ正規化・role補完・結合ユーティリティ（正常／異常／境界値） | `common/chat/message.py` |
 | **T06-01** | TextSplit Utility | 長文分割処理（最大長・文単位・多言語・特殊ケース） | `common/chat/textsplit.py` |
+| **T06-02** | TextSplit Utility (Edges) | 境界・例外・多改行・英文 ". " 境界・非 int 許容などの端部挙動を網羅       | `common/chat/textsplit.py`          |
 | **T07-01** | Continuation Flow | 会話継続（履歴＋入力→応答生成）・textsplit連携・例外処理・分岐網羅 | `common/chat/continuation.py` |
+| **T07-02** | Continuation (Edges)      | `max_steps=0`/空チャンク/例外時フォールバック/非文字列応答/辞書入力を網羅 | `common/chat/continuation.py`       |
 | **T08-01** | Sharing Session | セッション共有（export/import/guild共有/互換）・冪等性・サニタイズ | `common/chat/sharing.py` |
 
 ---
@@ -238,6 +240,23 @@ python -m tests.common.chat.T06_TextSplit_01_textsplit_test
 ```
 
 ---
+### T06-02 : TextSplit Utility (Edges)
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T06-02-01** | 最小分割                 | `max_chars=1` で 1 文字ずつ分割                                           | `common/chat/textsplit.py` |
+| **T06-02-02** | 英文文末（". "）         | 区切り記号後の空白を**保持**して分割（実装準拠）                         | `common/chat/textsplit.py` |
+| **T06-02-03** | CRLF 混在                | `\r\n` を含むテキストの長さ制約分割                                      | `common/chat/textsplit.py` |
+| **T06-02-04** | ジャスト境界             | `len(text) == max_chars` の等号境界                                      | `common/chat/textsplit.py` |
+| **T06-02-05** | 不正長（<=0）            | `max_chars <= 0` で `ValueError`                                         | `common/chat/textsplit.py` |
+| **T06-02-06** | 非 int 許容              | 文字列数値などを **int キャスト許容**（正常分割）                         | `common/chat/textsplit.py` |
+| **T06-02-07** | 超長単語ハード分割       | 空白なし長語を `max_chars` ごとに強制分割                                | `common/chat/textsplit.py` |
+
+```bash
+python -m tests.common.chat.T06_TextSplit_02_textsplit_edges_test
+```
+
+---
 ### T07-01 : Continuation Flow
 
 | 番号 | 目的 | 検証内容 | モジュール |
@@ -253,6 +272,21 @@ python -m tests.common.chat.T06_TextSplit_01_textsplit_test
 
 ```bash
 python -m tests.common.chat.T07_Continuation_01_continuation_test
+```
+
+---
+### T07-02 : Continuation (Edges)
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T07-02-01** | ステップ下限（0）             | `max_steps=0` でも **最低1回は chat 実行**（実装準拠）                                      | `common/chat/continuation.py` |
+| **T07-02-02** | 空チャンク時の挙動           | `textsplit` が `[]` を返しても **元メッセージで1回投げる**                                  | `common/chat/continuation.py` |
+| **T07-02-03** | 分割例外時フォールバック     | `textsplit` 例外でも **フォールバックで1回投げる**                                          | `common/chat/continuation.py` |
+| **T07-02-04** | 非文字列応答の正規化         | provider 応答が非文字列でも `str()` 化される                                                | `common/chat/continuation.py` |
+| **T07-02-05** | dict 入力の正規化            | 単一 dict 入力が `message.normalize_messages` 経由で正規化される                            | `common/chat/continuation.py` |
+
+```bash
+python -m tests.common.chat.T07_Continuation_02_continuation_edges_test
 ```
 
 ---
