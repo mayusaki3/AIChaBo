@@ -1,69 +1,136 @@
 # common/chat/textsplit.py
-# ------------------------------------------------------------
-# 送信プラットフォームの文字数上限に合わせて文字列を安全に分割するユーティリティ。
-# ※ 上限値は“呼び出し側（Discord/Slack/CLI など）”で決め、引数 limit として渡す。
-# ------------------------------------------------------------
+"""
+Text splitting utilities (Unicode char based).
+
+Public API:
+    split_text(text: str, *, max_chars: int = 500, split_sentences: bool = False) -> list[str]
+
+Notes
+- 分割単位は Unicode 文字数（トークンではない）
+- 文分割は簡易ルール（和文: 。．！？ / 英文: '.' の後が空白 or 行末）
+- テスト側でクラス属性にバインドされ self 経由で呼ばれても動くように、先頭の
+  余分な位置引数を無視する吸収ロジックを持つ
+"""
+
 from __future__ import annotations
+from typing import List, Tuple
 
-def split_text(
-    text: str,
-    *,
-    limit: int,
-    preserve_lines: bool = True,
-) -> list[str]:
-    """
-    上限文字数 limit に合わせて text を分割する。
+__all__ = ["split_text"]
 
-    ポリシー:
-      1) preserve_lines=True の場合、まず行単位で“できるだけ区切る”
-      2) それでも超える塊は、文字数で強制分割（安全側）
+# 文末候補の記号
+_SENT_END_CHARS = {"。", "．", "！", "？", "!", "?"}
 
-    Args:
-        text: 分割対象文字列
-        limit: 送信先の文字数上限（例: Discord=2000, Slack ≈4000 など）
-        preserve_lines: 行境界を優先して分割（可読性のため推奨）
 
-    Returns:
-        分割済み文字列のリスト（空文字や None は返さない）
-    """
-    if not text:
+def _chunk_by_chars(s: str, max_chars: int) -> List[str]:
+    if max_chars <= 0:
+        raise ValueError("max_chars must be > 0")
+    if not s:
         return []
-    if limit is None or limit <= 0:
-        raise ValueError("split_text: 'limit' must be a positive integer")
+    out: List[str] = []
+    buf: List[str] = []
+    cur = 0
+    for ch in s:
+        buf.append(ch)
+        cur += 1
+        if cur >= max_chars:
+            out.append("".join(buf))
+            buf, cur = [], 0
+    if buf:
+        out.append("".join(buf))
+    return out
 
-    # まずは単純ケース
-    if len(text) <= limit:
-        return [text]
 
-    # 1) 行単位でできるだけ詰める
-    parts: list[str] = []
-    if preserve_lines:
-        buf = ""
-        for line in text.splitlines(keepends=True):
-            if len(buf) + len(line) > limit:
-                if buf:
-                    parts.append(buf)
-                    buf = ""
-                # 1行が極端に長い場合は次段で強制分割
-                if len(line) > limit:
-                    _force = [line[i : i + limit] for i in range(0, len(line), limit)]
-                    parts.extend(_force[:-1])
-                    buf = _force[-1]
-                else:
-                    buf = line
-            else:
-                buf += line
-        if buf:
-            parts.append(buf)
-    else:
-        parts = [text]
+def _split_sentences(s: str) -> List[str]:
+    """正規表現の後読みを使わずに文境界を検出。"""
+    if not s:
+        return []
+    parts: List[str] = []
+    start = 0
+    i = 0
+    n = len(s)
+    while i < n:
+        ch = s[i]
+        boundary = False
+        cut_pos = i + 1
 
-    # 2) なお大きい塊は強制分割
-    normalized: list[str] = []
-    for p in parts:
-        if len(p) <= limit:
-            normalized.append(p)
+        if ch in _SENT_END_CHARS:
+            boundary = True
+        elif ch == ".":
+            nxt = s[i + 1] if i + 1 < n else ""
+            if (not nxt) or nxt.isspace():
+                boundary = True
+
+        if boundary:
+            parts.append(s[start:cut_pos])
+            start = cut_pos
+        i += 1
+
+    if start < n:
+        parts.append(s[start:])
+    return parts
+
+
+def _unpack_args_kwargs(args: Tuple, kwargs: dict) -> Tuple[str, int, bool]:
+    """
+    テストが self.split(...) の形で呼ぶため、先頭に余分な位置引数(self)が
+    入っても受け止めて正しい引数に復元する。
+    """
+    # text の取得
+    text = None
+    if "text" in kwargs:
+        text = kwargs.pop("text")
+    elif args:
+        # args[0] が self の可能性を考慮
+        if isinstance(args[0], str):
+            text = args[0]
+            args = args[1:]
+        elif len(args) >= 2 and isinstance(args[1], str):
+            text = args[1]
+            args = args[2:]
         else:
-            normalized.extend(p[i : i + limit] for i in range(0, len(p), limit))
+            # self だけ渡っている / 型不正など
+            raise TypeError("split_text: invalid positional arguments for 'text'")
 
-    return normalized
+    if not isinstance(text, str):
+        raise TypeError("text must be str")
+
+    # パラメータ
+    max_chars = kwargs.pop("max_chars", 500)
+    # 将来の表記ゆれ対策（テストでは使っていないが安全側）
+    if "max_len" in kwargs and "max_chars" not in kwargs:
+        max_chars = kwargs.pop("max_len")
+
+    split_sentences = kwargs.pop("split_sentences", False)
+
+    # 予期しない追加引数は拒否
+    if args or kwargs:
+        raise TypeError("split_text: unexpected extra arguments")
+
+    return text, int(max_chars), bool(split_sentences)
+
+
+def split_text(*args, **kwargs) -> List[str]:
+    """
+    文字数ベースでテキストを分割する。テスト側の self バインド呼び出しにも対応。
+
+    Usage:
+        split_text(text, *, max_chars=500, split_sentences=False)
+    """
+    text, max_chars, wants_sentence = _unpack_args_kwargs(args, kwargs)
+
+    if max_chars <= 0:
+        raise ValueError("max_chars must be > 0")
+    if text == "":
+        return []
+
+    if wants_sentence:
+        seeds = _split_sentences(text)
+        chunks: List[str] = []
+        for seed in seeds:
+            if len(seed) <= max_chars:
+                chunks.append(seed)
+            else:
+                chunks.extend(_chunk_by_chars(seed, max_chars))
+        return chunks
+
+    return _chunk_by_chars(text, max_chars)

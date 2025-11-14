@@ -33,8 +33,20 @@ coverage run -a -m tests.common.chat.T04_ChatLoop_07_chat_loop_helpers_test
 # T05 : common/chat/message.py
 coverage run -a -m tests.common.chat.T05_Message_01_message_test
 
-# T06 : common/chat/
-# coverage run -a -m tests.common.chat.T06_Context_01_context_test
+# T06 : common/chat/textsplit.py
+coverage run -a -m tests.common.chat.T06_TextSplit_01_textsplit_test
+
+# T07 : common/chat/continuation.py
+coverage run -a -m tests.common.chat.T07_Continuation_01_continuation_test
+
+# T08 : common/chat/sharing.py
+# coverage run -a -m tests.common.chat.T07_Continuation_01_continuation_test
+
+# T09 : common/chat/
+# coverage run -a -m tests.common.chat.T07_Continuation_01_continuation_test
+
+# T10 : common/chat/
+# coverage run -a -m tests.common.chat.T07_Continuation_01_continuation_test
 
 coverage report -m
 coverage html

@@ -27,53 +27,53 @@ class TextSplitTest(unittest.TestCase):
     def test_01_basic(self):
         self._need()
         text = "a" * 120
-        out = self.split(text, max_len=50)
+        out = self.split(text, max_chars=50)
         self.assertTrue(all(1 <= len(x) <= 50 for x in out))
 
     # [T06-01-02] 文単位（和文）
     def test_02_sentences_ja(self):
         self._need()
         text = "一文です。二文目です！三文？"
-        out = self.split(text, max_len=50, split_sentences=True)
+        out = self.split(text, max_chars=50, split_sentences=True)
         self.assertGreaterEqual(len(out), 3)
 
     # [T06-01-03] 文単位（英文）
     def test_03_sentences_en(self):
         self._need()
         text = "One. Two? Three!"
-        out = self.split(text, max_len=50, split_sentences=True)
+        out = self.split(text, max_chars=50, split_sentences=True)
         self.assertGreaterEqual(len(out), 3)
 
     # [T06-01-04] 改行混在
     def test_04_newlines(self):
         self._need()
         text = "a\n\nb\nc"
-        out = self.split(text, max_len=2, split_sentences=False)
+        out = self.split(text, max_chars=2, split_sentences=False)
         self.assertTrue(len(out) >= 2)
 
     # [T06-01-05] 超長単語
     def test_05_super_long_token(self):
         self._need()
         text = "x" * 200
-        out = self.split(text, max_len=30)
+        out = self.split(text, max_chars=30)
         self.assertTrue(all(len(x) <= 30 for x in out))
 
     # [T06-01-06] 空文字
     def test_06_empty(self):
         self._need()
-        out = self.split("", max_len=10)
+        out = self.split("", max_chars=10)
         self.assertIsInstance(out, list)
 
     # [T06-01-07] 無効パラメータ
     def test_07_invalid_param(self):
         self._need()
         with self.assertRaises(Exception):
-            self.split("abc", max_len=0)
+            self.split("abc", max_chars=0)
 
     # [T06-01-08] 末尾境界
     def test_08_tail_boundary(self):
         self._need()
-        out = self.split("終端。", max_len=10, split_sentences=True)
+        out = self.split("終端。", max_chars=10, split_sentences=True)
         self.assertGreaterEqual(len(out), 1)
 
 
