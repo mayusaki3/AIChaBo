@@ -13,11 +13,9 @@ import unittest
 from unittest.mock import patch
 from tests._report import run_unittest_suite
 
-
 def _load_targets():
     from common.chat import continuation as C  # type: ignore
     return C, C.continue_chat
-
 
 class ContinuationEdgesTest(unittest.TestCase):
     @classmethod

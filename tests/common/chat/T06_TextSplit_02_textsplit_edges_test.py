@@ -15,7 +15,7 @@ from tests._report import run_unittest_suite
 
 def _load_targets():
     from common.chat import textsplit as TS  # type: ignore
-    return TS, TS.split_text
+    return TS, staticmethod(TS.split_text)
 
 
 class TextSplitEdgesTest(unittest.TestCase):
