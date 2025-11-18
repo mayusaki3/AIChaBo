@@ -1,73 +1,88 @@
-# common/chat/continuation.py
+# -*- coding: utf-8 -*-
+"""
+Continuation flow
+
+要点:
+- messages 正規化後、textsplit で分割し chat_loop へ逐次投入
+- max_steps<=0 / 空チャンク / textsplit 例外時は chat_loop を呼ばない
+- モジュール属性として chat_loop を公開（テストの patch 対象）
+"""
 from __future__ import annotations
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, List, Optional, Iterable, Union
 
-# tests からパッチされる想定の依存（存在しなくても落ちないよう遅延参照）
-from . import textsplit as _textsplit  # tests で差し替えられる
-from . import chat_loop as _chat_loop  # tests で差し替えられる
-from .message import normalize_messages as _normalize  # tests で差し替えられる
+# テストで patch されるためモジュール属性として import（名前を露出）
+from . import chat_loop  # noqa: F401
+from . import message as message_mod
+from . import textsplit as textsplit_mod
 
-Msgs = Iterable[Any]
+MessageLike = Union[str, Dict[str, Any]]
+MessagesInput = Union[MessageLike, Iterable[MessageLike]]
 
-def _coalesce_messages(args: tuple, kwargs: Dict[str, Any]) -> Any:
+def _to_list(messages: MessagesInput) -> List[Dict[str, Any]]:
+    return message_mod.normalize_messages(messages)
+
+def _join_contents(msgs: List[Dict[str, Any]]) -> str:
+    # 最小限: content を順に結合（provider 振る舞いは別層テスト）
+    contents = [m.get("content") for m in msgs if isinstance(m, dict)]
+    return message_mod.join_messages([c for c in contents if isinstance(c, str)])
+
+def continue_chat(
+    messages: MessagesInput,
+    *,
+    policy: Optional[Dict[str, Any]] = None,
+    **extra: Any,
+) -> str:
     """
-    位置引数/キーワード双方に 'messages' が来ても最終値を一つに集約する。
+    連続チャットの薄い制御。
+    - 正規化 → 連結 → 分割 → chat_loop.chat を順次呼び出し
+    - 例外/境界条件では安全に早期終了
+    :param messages: str / dict / それらの反復
+    :param policy: provider/model 等（任意）
+    :return: 最終応答文字列（最低限の実装）
     """
-    msg = args[0] if args else None
-    if "messages" in kwargs:
-        if msg is None:
-            msg = kwargs.pop("messages")
-        else:
-            # 二重指定は kwargs 側を捨てる（テスト互換優先）
-            kwargs.pop("messages", None)
-    return msg
-
-def continue_chat(*args, **kwargs) -> Optional[str]:
-    """
-    会話継続の最小制御:
-    - 入力メッセージを正規化 → 大きい場合は textsplit で分割
-    - max_steps 回数だけ provider を呼び出す
-    - エッジ条件（max_steps<=0, 空チャンク, textsplit 例外）は chat を呼ばない
-    """
-    messages = _coalesce_messages(args, kwargs)
-    policy = kwargs.pop("policy", None)
-
-    # パラメータ規約
-    max_steps = kwargs.pop("max_steps", 3)
-    try:
-        max_steps = int(max_steps)
-    except Exception:
-        max_steps = 3
-
-    # 正規化（tests がパッチする）
-    msgs: List[Dict[str, Any]] = _normalize(messages)  # type: ignore
-    # コンテンツ連結（単純化：一つの大きなテキストにする）
-    joined = " ".join([m.get("content", "") for m in msgs if isinstance(m, dict)])
-
-    # 文書分割（安全に握り潰し）
-    chunks: List[str] = []
-    try:
-        # tests で split_text をパッチし得る
-        chunks = _textsplit.split_text(joined, max_chars=200, split_sentences=False)  # type: ignore
-    except Exception:
-        chunks = []
-
-    # --- エッジ規約: ここで終了条件を満たす場合は chat を呼ばない ---
-    if max_steps <= 0:
-        return None
-    if not chunks or all(not c.strip() for c in chunks):
-        return None
-
-    # 呼び出し回数は min(len(chunks), max_steps)
-    calls = min(len(chunks), max_steps)
-
-    last: Optional[str] = None
-    for i in range(calls):
+    # policy ガード（Noneでも落ちない）
+    max_steps = 1
+    if isinstance(policy, dict):
         try:
-            # tests が chat_loop.chat をパッチ
-            last = _chat_loop.chat(messages=[{"role": "user", "content": chunks[i]}], policy=policy)  # type: ignore
+            max_steps = int(policy.get("max_steps", 1))
         except Exception:
-            # 1 回の失敗は握り潰して継続
-            continue
+            max_steps = 1
 
-    return last
+    # [T07-02-01] max_steps==0 → 呼ばれない
+    if max_steps <= 0:
+        return ""
+
+    # 正規化
+    try:
+        msgs = _to_list(messages)
+    except Exception:
+        return ""
+
+    # 連結
+    try:
+        text = _join_contents(msgs)
+    except Exception:
+        text = ""
+
+    # 分割（例外吸収 & 空チャンクは呼ばない）
+    try:
+        chunks = textsplit_mod.split_text(text, max_chars=policy.get("max_chars", 1000) if isinstance(policy, dict) else 1000, split_sentences=False)
+    except Exception:
+        # [T07-02-03] textsplit 例外 → 呼ばれない
+        return ""
+
+    if not chunks or all((not c) for c in chunks):
+        # [T07-02-02] 空チャンク → 呼ばれない
+        return ""
+
+    # 実行（steps 上限を守る）
+    taken = 0
+    last = ""
+    for ch in chunks:
+        if taken >= max_steps:
+            break
+        # テストで chat_loop.chat が patch される
+        last = chat_loop.chat(ch, policy=policy, **extra)  # type: ignore[attr-defined]
+        taken += 1
+
+    return "" if last is None else str(last)
