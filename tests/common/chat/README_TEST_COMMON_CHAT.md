@@ -19,6 +19,7 @@
 | **T05-01** | Message Utility | メッセージ正規化・role補完・結合ユーティリティ（正常／異常／境界値） | `common/chat/message.py` |
 | **T06-01** | TextSplit Utility | 長文分割処理（最大長・文単位・多言語・特殊ケース） | `common/chat/textsplit.py` |
 | **T06-02** | TextSplit Utility (Edges) | 境界・例外・多改行・英文 ". " 境界・非 int 許容などの端部挙動を網羅       | `common/chat/textsplit.py`          |
+| **T06-03** | TextSplit Utility (More Cases) | 文区切り混在・Unicode/絵文字・改行保持の厳密性・決定性・優先順位・型境界の補完 | `common/chat/textsplit.py` |
 | **T07-01** | Continuation Flow | 会話継続（履歴＋入力→応答生成）・textsplit連携・例外処理・分岐網羅 | `common/chat/continuation.py` |
 | **T07-02** | Continuation (Edges)      | `max_steps=0`/空チャンク/例外時フォールバック/非文字列応答/辞書入力を網羅 | `common/chat/continuation.py`       |
 | **T08-01** | Sharing Session | セッション共有（export/import/guild共有/互換）・冪等性・サニタイズ | `common/chat/sharing.py` |
@@ -254,6 +255,23 @@ python -m tests.common.chat.T06_TextSplit_01_textsplit_test
 
 ```bash
 python -m tests.common.chat.T06_TextSplit_02_textsplit_edges_test
+```
+
+---
+### T06-03 : TextSplit Utility (More Cases)
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T06-03-01** | 英文 空白保持（複合文） | `. ` を含む複合文で空白扱いが実装準拠であることを再確認 | `common/chat/textsplit.py` |
+| **T06-03-02** | CJK 文区切り複合 | `。！？…` 混在で文数が期待以上になる | `common/chat/textsplit.py` |
+| **T06-03-03** | Unicode/絵文字 長さ制御 | サロゲート/結合文字でも `max_chars` を超えない | `common/chat/textsplit.py` |
+| **T06-03-04** | 改行保持 厳密一致 | `\r\n`/`\n` 混在で `"".join(out) == text` を満たす | `common/chat/textsplit.py` |
+| **T06-03-05** | 文区切り優先 vs ハード分割 | `max_chars` 付近の文末記号で優先順位が現実装どおり | `common/chat/textsplit.py` |
+| **T06-03-06** | 決定性 | 同一入力・同一パラメータで出力が完全一致 | `common/chat/textsplit.py` |
+| **T06-03-07** | `max_chars` キャスト/境界 | `"50"` は許容、`"0"`/`"abc"` は例外（現実装） | `common/chat/textsplit.py` |
+
+```bash
+python -m tests.common.chat.T06_TextSplit_03_textsplit_more_cases_test
 ```
 
 ---
