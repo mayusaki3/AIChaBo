@@ -20,6 +20,7 @@
 | **T06-01** | TextSplit Utility | 長文分割処理（最大長・文単位・多言語・特殊ケース） | `common/chat/textsplit.py` |
 | **T06-02** | TextSplit Utility (Edges) | 境界・例外・多改行・英文 ". " 境界・非 int 許容などの端部挙動を網羅       | `common/chat/textsplit.py`          |
 | **T06-03** | TextSplit Utility (More Cases) | 文区切り混在・Unicode/絵文字・改行保持の厳密性・決定性・優先順位・型境界の補完 | `common/chat/textsplit.py` |
+| **T06-04** | TextSplit Arg/Compat | 互換レイヤ（self バインド/省略/既定値）と JA append 分岐の網羅 | `common/chat/textsplit.py` |
 | **T07-01** | Continuation Flow | 会話継続（履歴＋入力→応答生成）・textsplit連携・例外処理・分岐網羅 | `common/chat/continuation.py` |
 | **T07-02** | Continuation (Edges)      | `max_steps=0`/空チャンク/例外時フォールバック/非文字列応答/辞書入力を網羅 | `common/chat/continuation.py`       |
 | **T08-01** | Sharing Session | セッション共有（export/import/guild共有/互換）・冪等性・サニタイズ | `common/chat/sharing.py` |
@@ -272,6 +273,26 @@ python -m tests.common.chat.T06_TextSplit_02_textsplit_edges_test
 
 ```bash
 python -m tests.common.chat.T06_TextSplit_03_textsplit_more_cases_test
+```
+
+---
+### T06-04 : TextSplit Arg/Compat
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T06-04-01** | 互換レイヤ: 例外 | 引数なし → `TypeError`（`_parse_args` 先頭分岐） | `common/chat/textsplit.py` |
+| **T06-04-02** | 互換レイヤ: 型誤り | `self` 相当 + 第2引数も非文字列 → `TypeError` | `common/chat/textsplit.py` |
+| **T06-04-03** | 互換レイヤ: 既定値 | `max_chars` 省略 → 既定 `2000` が効く（保存モード） | `common/chat/textsplit.py` |
+| **T06-04-04** | 互換レイヤ: 位置引数 | 第3引数で `split_sentences=True` 指定の経路 | `common/chat/textsplit.py` |
+| **T06-04-05** | JA append 分岐 | JA 文末到達時の `if s: out.append(s)` 行の到達 | `common/chat/textsplit.py` |
+| **T06-04-06** | EN 文末（無句点）flush 分岐 | 末尾に句点が無い英文で flush 側の分岐に到達することを確認 | `common/chat/textsplit.py` |
+| **T06-04-07** | 空文字 + 文分割モード（互換経路） | 文分割モードで空文字入力時の互換経路が安定して空出力になることを確認 | `common/chat/textsplit.py` |
+| **T06-04-08** | EN 文末: 末尾が空白のみ → append スキップ | 末尾が空白だけの場合に残バッファを append しない（スキップ枝）ことを確認 | `common/chat/textsplit.py` |
+| **T06-04-09** | EN 文末: 改行/空白のみ入力 → append スキップ | 入力が改行/空白のみの場合に残バッファを append しない（スキップ枝）ことを確認 | `common/chat/textsplit.py` |
+| **T06-04-10** | JA 文末: 直前が空白のみ → 空チャンクは append されない（ガード枝） | JA 文末直前が空白のみのケースで空チャンクが append されないこと（`if s:` ガード枝）を確認 | `common/chat/textsplit.py` |
+
+```bash
+python -m tests.common.chat.T06_TextSplit_04_textsplit_arg_compat_test
 ```
 
 ---

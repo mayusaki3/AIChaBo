@@ -37,6 +37,7 @@ coverage erase
 coverage run -a -m tests.common.chat.T06_TextSplit_01_textsplit_test
 coverage run -a -m tests.common.chat.T06_TextSplit_02_textsplit_edges_test
 coverage run -a -m tests.common.chat.T06_TextSplit_03_textsplit_more_cases_test
+coverage run -a -m tests.common.chat.T06_TextSplit_04_textsplit_arg_compat_test
 
 # # T07 : common/chat/continuation.py
 # coverage run -a -m tests.common.chat.T07_Continuation_01_continuation_test

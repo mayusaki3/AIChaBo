@@ -98,15 +98,19 @@ def _split_sentences_ja(text: str) -> List[str]:
     for ch in text:
         buf.append(ch)
         if _RE_JA_END.fullmatch(ch):
-            s = "".join(buf).strip()
-            if s:
+            raw = "".join(buf)
+            s = raw.strip()
+            # 「空白＋終端のみ」なら捨てる（ガード枝）
+            # 例: "　。" / "   ！" など -> append しない
+            if s and _RE_JA_END.sub("", s).strip() != "":
                 out.append(s)
             buf = []
     # 終端記号で終わらない残り
     tail = "".join(buf).strip()
     if tail:
         out.append(tail)
-    return out if out else [text]  # 空でなければ返し、全く分割できなければ全文
+    # out が空（= 全体が空白＋終端のみ 等）の場合は空配列のまま返す
+    return out
 
 
 def _split_sentences(text: str) -> List[str]:
