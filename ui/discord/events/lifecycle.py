@@ -3,7 +3,7 @@
 from ..runtime.client import client, tree
 from ..utils.log import _print
 from common.plugins.dispatcher import list_providers
-from common.utils.webread_utils import redact
+from common.utils.redact import redact
 from common.secret.store import store
 import os, asyncio, sys
 from discord import Object as DiscordObject

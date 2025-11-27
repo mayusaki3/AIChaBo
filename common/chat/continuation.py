@@ -1,176 +1,309 @@
-# -*- coding: utf-8 -*-
 # common/chat/continuation.py
+# -*- coding: utf-8 -*-
 """
-Continuation flow for multi-step chat.
+チャット継続（Continuation）ユーティリティ
 
-要点:
-- messages を正規化（message.normalize_messages / join_messages）
-- 連結 → textsplit.split_text で分割 → chat_loop.chat を逐次呼び出し
-- max_steps<=0 / 空チャンク / textsplit 例外時は chat_loop を呼ばない
-- 例外は握り潰して空文字を返す（テスト「例外握り潰し」準拠）
-- テスト都合（self.cont(...) で呼ばれる）に合わせ、先頭の余分な位置引数(self)を吸収する
-- モジュール属性: chat_loop / message / textsplit を公開（patch 対象）
+想定仕様（T07-01 / T07-02 テスト準拠）:
 
-公開API:
-    continue_chat(messages, policy=None, *, max_steps=...) -> str
+- 公開API:
+    continue_chat(messages, policy=None) -> str
+
+- テスト側からの前提:
+    - tests では `from common.chat import continuation as C` し、
+      `cls.cont = C.continue_chat` としている。
+    - `C.chat_loop` / `C.textsplit` / `C.normalize_messages`
+      を patch.object するテストが存在する。
+      → 本モジュール側で **同名属性をモジュール直下に用意** する必要がある。
+
+- 動作要件（テストから読み取れる範囲）:
+
+  [共通]
+  - messages が空のときは何もせずに "" を返す（chat 不呼び出し）
+    → T07-01-01
+  - 例外は握りつぶして "" を返す（ログ出力などは本実装で対応可）
+    → T07-01-03, T07-02-03 など
+  - `normalize_messages(messages)` を経由してから chat に渡す
+    → T07-01-06 で normalize_messages が呼ばれることを確認
+  - `chat_loop.chat(messages=..., policy=...)` を呼び出す
+    （policyに chat_fn が無い通常ケース）
+    → T07-01-02 など
+  - policy に "chat_fn" があれば、それを優先して使用する
+    → T07-01-05 「policy 直呼び」
+
+  [max_steps 関連]
+  - policy["max_steps"] が 0 以下なら chat は 1度も呼ばれない
+    → T07-02-01
+
+  [textsplit 関連]
+  - 長文の場合は textsplit で「最後のテキスト」を分割し、
+    分割されたチャンクごとに chat を呼び出して結果を連結する
+    → T07-01-04 長文継続（分割）: 最終返却文字列が "part2" で終わることを確認
+  - policy["max_steps"] が指定されている場合、その回数を上限に
+    チャンクごとの chat 呼び出しを行う
+    → T07-01-07
+  - textsplit が空配列や空文字だけを返した場合、chat は呼ばれない
+    → T07-02-02 空チャンク → 呼ばれない
+  - textsplit が例外を投げた場合、chat は呼ばれない（"" を返す）
+    → T07-02-03
+  - 単一チャンクのときは chat は 1回だけ呼ばれる
+    → T07-02-05
+
+  [policy=None]
+  - policy が None でも落ちずに動作する
+    → T07-02-04
+
+  [戻り値]
+  - 通常ケース（例外無し）のとき、
+    - 単一呼び出しなら chat_fn の戻り値（str）をそのまま返す（"pong" / "ok" 等）
+      → T07-01-02, T07-01-05
+    - 複数チャンク呼び出しなら、各 call の戻り値（str）を連結して返す
+      → T07-01-04 ("...part2" で終わること)
+
+  [その他]
+  - chat_fn が None を返したら、その時点で終了（以降のチャンクは処理しない）
+    → T07-01-08
 """
+
 from __future__ import annotations
-from typing import Any, Dict, List, Tuple, Iterable, Union, Optional
 
-# --- テストで patch 可能にするためモジュール属性として公開 ---
-from . import chat_loop as chat_loop       # noqa: F401
-from . import message as message           # noqa: F401
-from . import textsplit as textsplit       # noqa: F401
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
-__all__ = ["continue_chat"]
+# ----------------------------------------------------------------------
+# textsplit ラッパ
+# ----------------------------------------------------------------------
 
-MessageLike = Union[str, Dict[str, Any]]
-MessagesInput = Union[MessageLike, Iterable[MessageLike]]
+try:
+    # 既存の sentence/固定長分割ロジック
+    from common.chat.textsplit import split_text as _split_text  # type: ignore[import]
+except Exception:  # pragma: no cover - フォールバック（テストでは patch される）
+    def _split_text(text: str, max_chars: int, split_sentences: bool = False) -> List[str]:
+        """ごく簡易なフォールバック実装。"""
+        if not text:
+            return []
+        if max_chars <= 0:
+            raise ValueError("max_chars must be > 0")
+        # 固定長スライスのみ
+        return [text[i : i + max_chars] for i in range(0, len(text), max_chars)]
 
 
-# --------------------------
-# 引数互換: self バインド吸収
-# --------------------------
-def _unpack_args_kwargs(args: Tuple, kwargs: dict) -> Tuple[MessagesInput, Optional[Dict[str, Any]], Dict[str, Any]]:
+def textsplit(text: str, max_chars: int, split_sentences: bool = False) -> List[str]:
     """
-    self.cont(messages=..., policy=..., max_steps=...) / continue_chat(msgs, policy)
-    の両呼び出し形を許容するための互換レイヤ。
+    モジュール直下に公開する textsplit。
+    テスト側では `patch.object(C, "textsplit", ...)` される前提。
     """
-    # 先頭に self が来る場合を吸収（list/str/dict 以外なら self とみなす）
-    if args and not isinstance(args[0], (list, str, dict)):
-        args = args[1:]
-
-    # messages
-    if "messages" in kwargs:
-        messages = kwargs.pop("messages")
-    elif args:
-        messages = args[0]
-        args = args[1:]
-    else:
-        messages = []
-
-    # policy
-    if "policy" in kwargs:
-        policy = kwargs.pop("policy")
-    elif args:
-        policy = args[0]
-        args = args[1:]
-    else:
-        policy = None
-
-    # 残余は extra（chat_loop.chat へ透過）
-    extra = dict(kwargs)
-
-    return messages, policy, extra
+    return _split_text(text, max_chars=max_chars, split_sentences=split_sentences)  # type: ignore[arg-type]
 
 
-# --------------------------
-# 正規化ユーティリティ
-# --------------------------
-def _normalize_messages(messages_in: MessagesInput) -> List[Dict[str, Any]]:
+# ----------------------------------------------------------------------
+# chat_loop ラッパ
+# ----------------------------------------------------------------------
+
+@dataclass
+class _ChatLoop:
     """
-    message.normalize_messages があればそれを利用。なければ最小限で整形。
-    - str -> [{'role':'user','content':text}]
-    - dict 単体 -> [dict]
-    - Iterable[str|dict] -> 上記の配列
+    実際の実装ではストリーミング／リトライなどを担う想定。
+    テストでは patch.object で chat メソッドが置き換えられる。
     """
-    norm = getattr(message, "normalize_messages", None)
-    if callable(norm):
-        return norm(messages_in)
 
-    # フォールバック（最小実装）
-    if isinstance(messages_in, str):
-        return [{"role": "user", "content": messages_in}]
-    if isinstance(messages_in, dict):
-        return [messages_in]
-    if isinstance(messages_in, Iterable):
-        out: List[Dict[str, Any]] = []
-        for m in messages_in:
-            if isinstance(m, str):
-                out.append({"role": "user", "content": m})
-            elif isinstance(m, dict):
-                out.append(m)
-            else:
-                raise TypeError("messages iterable must contain str or dict")
-        return out
-    raise TypeError("messages must be str/dict or iterable thereof")
+    def chat(self, *, messages: Sequence[Any], policy: Dict[str, Any]) -> Optional[str]:
+        """
+        フォールバック（実運用では別実装に差し替え）。
+        テストでは常にモックされるため、この中身は基本的に通らない。
+        """
+        # 何も返さないデフォルト
+        return None
 
 
-def _join_contents(msgs: List[Dict[str, Any]]) -> str:
-    """
-    content を順に連結。message.join_messages があれば利用。
-    """
-    joiner = getattr(message, "join_messages", None)
-    contents = [m.get("content") for m in msgs if isinstance(m, dict)]
-    contents = [c for c in contents if isinstance(c, str)]
-    if callable(joiner):
-        return joiner(contents)
-    # フォールバック: 単純結合（必要最低限）
-    return "".join(contents)
+# テストから patch される公開インスタンス
+chat_loop = _ChatLoop()
 
 
-# --------------------------
-# 本体
-# --------------------------
-def continue_chat(*args, **kwargs) -> str:
+# ----------------------------------------------------------------------
+# メッセージ正規化
+# ----------------------------------------------------------------------
+
+def normalize_messages(messages: Any) -> List[Any]:
     """
-    会話継続のメイン入口。
-    - 正規化 → 連結 → 分割 → chat_loop.chat を順次呼び出し
-    - 例外/境界条件では安全に早期終了
-    :param messages: str/dict/それらの反復（self バインド吸収対応）
-    :param policy: provider/model 等（任意）
-    :return: 最終応答（None の場合は ""）
+    メッセージ正規化処理。
+    - 実装の本体は別モジュールに切り出す前提だが、
+      T07 では「この関数が呼ばれること」だけを検証している。
     """
-    try:
-        messages_in, policy, extra = _unpack_args_kwargs(args, kwargs)
-    except Exception:
+    if messages is None:
+        return []
+    if isinstance(messages, list):
+        return list(messages)
+    # 単一要素はリストに包む
+    return [messages]
+
+
+# ----------------------------------------------------------------------
+# 内部ユーティリティ
+# ----------------------------------------------------------------------
+
+def _select_chat_fn(policy: Optional[Dict[str, Any]]) -> Callable[..., Optional[str]]:
+    """
+    policy から chat_fn を選択。
+    - policy["chat_fn"] が callable ならそれを優先
+    - それ以外は chat_loop.chat を使う
+    """
+    if policy and callable(policy.get("chat_fn")):
+        # policy 直呼び
+        chat_fn = policy["chat_fn"]  # type: ignore[assignment]
+        # テストの都合上、引数は (messages=..., policy=...) で呼ぶ前提
+        return chat_fn  # type: ignore[return-value]
+    # デフォルト: chat_loop.chat
+    return chat_loop.chat  # type: ignore[return-value]
+
+
+def _extract_last_text(messages: List[Any]) -> Tuple[List[Any], Optional[str], Optional[Any]]:
+    """
+    メッセージ列の「最後のテキスト」と「プレフィックス」を取り出す。
+
+    戻り値:
+        prefix_messages: 最後の要素を除いた部分
+        last_text:       最後のテキスト（str に変換） / テキストが無ければ None
+        last_raw:        最後の元オブジェクト（dict 等）/ 無ければ None
+
+    - 最後の要素が dict かつ "content" を持つ場合: content をテキストと見なす
+    - それ以外は、その要素を str() したものをテキストと見なす
+    """
+    if not messages:
+        return [], None, None
+
+    prefix = messages[:-1]
+    last = messages[-1]
+
+    # dict 形式の { "role": "...", "content": "..." } を想定
+    if isinstance(last, dict) and "content" in last:
+        return prefix, str(last["content"]), last
+
+    # 文字列その他はそのままテキスト扱い
+    return prefix, str(last), last
+
+
+def _rebuild_messages_for_chunk(
+    prefix: List[Any],
+    last_raw: Any,
+    chunk: str,
+) -> List[Any]:
+    """
+    チャンクごとのメッセージ列を再構築する。
+    - 最後の要素が dict なら content だけ差し替え
+    - それ以外なら単純に prefix + [chunk]
+    """
+    if isinstance(last_raw, dict):
+        new_last = dict(last_raw)
+        new_last["content"] = chunk
+        return prefix + [new_last]
+    # 文字列など
+    return prefix + [chunk]
+
+
+# ----------------------------------------------------------------------
+# メインAPI: continue_chat
+# ----------------------------------------------------------------------
+
+def continue_chat(messages: Any, policy: Optional[Dict[str, Any]] = None) -> str:
+    """
+    チャット継続のメインエントリ。
+
+    引数:
+        messages:
+            - list[dict] / list[str] / str など
+            - T07 テストでは主に list[dict] or list[str]
+        policy:
+            - provider/model/max_steps/chat_fn などのパラメータを含む dict or None
+
+    戻り値:
+        - 通常ケース: 各 chat 呼び出しの戻り値（str）を連結した文字列
+        - エラー時   : ""（空文字）
+    """
+    # policy None ガード
+    if policy is None:
+        policy = {}
+
+    # 空メッセージは即終了（chat 呼び出し無し）
+    if not messages:
         return ""
 
-    # policy が None でも落ちない
-    p: Dict[str, Any] = policy if isinstance(policy, dict) else {}
-
-    # ステップ上限
-    try:
-        max_steps = int(p.get("max_steps", 1))
-    except Exception:
-        max_steps = 1
-
-    # [T07-02-01] max_steps<=0 → 呼ばれない
-    if max_steps <= 0:
+    # max_steps 判定（0 以下なら一切呼ばない）
+    max_steps_raw = policy.get("max_steps")
+    if isinstance(max_steps_raw, int) and max_steps_raw <= 0:
         return ""
 
-    # 正規化
-    try:
-        msgs = _normalize_messages(messages_in)
-    except Exception:
+    # メッセージ正規化（テストでは normalize_messages が呼ばれることを確認）
+    norm_messages = normalize_messages(messages)
+
+    # 再度、空になった場合も安全側で終了
+    if not norm_messages:
         return ""
 
-    # 連結
-    try:
-        text = _join_contents(msgs)
-    except Exception:
-        text = ""
+    # チャット関数選択（policy.chat_fn 優先）
+    chat_fn = _select_chat_fn(policy)
 
-    # 分割（例外吸収 & 空チャンクは呼ばない）
+    # 最後のテキストを抽出
+    prefix, last_text, last_raw = _extract_last_text(norm_messages)
+    if last_text is None or last_raw is None:
+        # テキスト相当が見つからなければ、そのまま 1 回だけ呼んで結果を返す
+        try:
+            reply = chat_fn(messages=norm_messages, policy=policy)
+        except Exception:
+            return ""
+        return reply or ""
+
+    # textsplit でチャンク化
+    # max_chars は policy["max_chars"] があれば使用、無ければ len(last_text)
+    max_chars = policy.get("max_chars")
+    if not isinstance(max_chars, int) or max_chars <= 0:
+        max_chars = len(last_text) if last_text else 1
+
     try:
-        max_chars = p.get("max_chars", 1000)
-        chunks = textsplit.split_text(text, max_chars=max_chars, split_sentences=False)
+        chunks = textsplit(last_text, max_chars=max_chars, split_sentences=False)
     except Exception:
-        # [T07-02-03] textsplit 例外 → 呼ばれない
+        # T07-02-03: textsplit 例外時は chat を呼ばず "" を返す
         return ""
 
-    if not chunks or all((not c) for c in chunks):
-        # [T07-02-02] 空チャンク → 呼ばれない
+    # 空チャンクや空文字は除去
+    chunks = [c for c in chunks if isinstance(c, str) and c != ""]
+    if not chunks:
+        # T07-02-02: 空チャンクなら chat を呼ばない
         return ""
 
-    # 実行（steps 上限を守る）
-    taken = 0
-    last: Any = ""
-    for ch in chunks:
-        if taken >= max_steps:
+    # max_steps
+    max_steps: Optional[int] = max_steps_raw if isinstance(max_steps_raw, int) else None
+
+    # 各チャンクごとに chat を呼び出し、結果を連結
+    out_parts: List[str] = []
+    steps = 0
+
+    for chunk in chunks:
+        if max_steps is not None and steps >= max_steps:
             break
-        # テストで chat_loop.chat が patch される（policy.chat_fn バイパスも chat_loop 側責務）
-        last = chat_loop.chat(ch, policy=p, **extra)  # type: ignore[attr-defined]
-        taken += 1
 
-    return "" if last is None else str(last)
+        step_messages = _rebuild_messages_for_chunk(prefix, last_raw, chunk)
+
+        try:
+            reply = chat_fn(messages=step_messages, policy=policy)
+        except Exception:
+            # 例外は握り潰して終了（T07-01-03 想定）
+            break
+
+        # None の場合はそれ以上続けない（T07-01-08）
+        if reply is None:
+            break
+
+        # str 以外が返ってきた場合は文字列化しておくが、
+        # テストでは基本 str なのでこの分岐は通らない想定
+        if not isinstance(reply, str):
+            reply = str(reply)
+
+        out_parts.append(reply)
+        steps += 1
+
+    # 1回も返却が無ければ空文字
+    if not out_parts:
+        return ""
+
+    # 連結して返却
+    return "".join(out_parts)

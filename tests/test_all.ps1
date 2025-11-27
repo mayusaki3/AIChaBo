@@ -2,13 +2,13 @@ coverage erase
 
 ### M01: common/secretモジュール単体テスト
 
-# T01
+# # T01
 # coverage run -a -m tests.common.secret.T01_SecretStore_01_store_test
 # coverage run -a -m tests.common.secret.T01_SecretStore_02_store_edge_test
 # coverage run -a -m tests.common.secret.T01_SecretStore_03_store_init_test
 # coverage run -a -m tests.common.secret.T01_SecretStore_04_store_misc_test
 
-# ### M02: common/chatモジュール単体テスト
+### M02: common/chatモジュール単体テスト
 
 # # T01 : common/chat/provider.py
 # coverage run -a -m tests.common.chat.T01_Provider_01_provider_test
@@ -30,8 +30,8 @@ coverage erase
 # coverage run -a -m tests.common.chat.T04_ChatLoop_06_chat_loop_paths_cover_test
 # coverage run -a -m tests.common.chat.T04_ChatLoop_07_chat_loop_helpers_test
 
-# # T05 : common/chat/message.py
-# coverage run -a -m tests.common.chat.T05_Message_01_message_test
+# T05 : common/chat/message.py
+coverage run -a -m tests.common.chat.T05_Message_01_message_test
 
 # # T06 : common/chat/textsplit.py
 # coverage run -a -m tests.common.chat.T06_TextSplit_01_textsplit_test
