@@ -20,7 +20,9 @@ def _load_targets():
 class ContinuationEdgesTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.mod, cls.cont = _load_targets()
+        mod, cont = _load_targets()
+        cls.mod = mod
+        cls.cont = staticmethod(cont)
 
     @patch("common.chat.continuation.chat_loop")
     def test_01_max_steps_zero(self, mock_chat_loop):

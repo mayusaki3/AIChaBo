@@ -19,7 +19,9 @@ def _load_targets():
 class ContinuationFlowTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.mod, cls.cont = _load_targets()
+        mod, cont = _load_targets()
+        cls.mod = mod
+        cls.cont = staticmethod(cont)
 
     def _need(self):
         if not self.cont:
