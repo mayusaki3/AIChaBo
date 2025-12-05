@@ -112,4 +112,4 @@ if __name__ == "__main__":
         "test_08_partial_share": ("M02:T08-01-08", "部分共有"),
     }
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(SharingTest)
-    run_unittest_suite("M02:T08-01", suite, mapping)
+    run_unittest_suite("M02:T08-01 common/chat/sharing", suite, mapping)
