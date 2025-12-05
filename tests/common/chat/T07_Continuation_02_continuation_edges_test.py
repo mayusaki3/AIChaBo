@@ -71,4 +71,4 @@ if __name__ == "__main__":
         "test_05_runs_once": ("M02:T07-02-05", "単一チャンクは1回呼び出し"),
     }
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ContinuationEdgesTest)
-    run_unittest_suite("M02:T07-02", suite, mapping)
+    run_unittest_suite("M02:T07-02 common\chat\continuation", suite, mapping)

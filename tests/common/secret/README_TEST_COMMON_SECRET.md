@@ -1,6 +1,6 @@
 [テストユーティリティ](../../README_TEST.md) > M01: common/secretモジュール単体テスト
 
-# M01: ccommon/secretモジュール単体テスト
+# M01: common/secretモジュール単体テスト
 
 ## テスト番号と検証内容（Index）
 

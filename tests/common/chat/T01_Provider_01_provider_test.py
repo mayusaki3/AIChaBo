@@ -69,4 +69,4 @@ if __name__ == "__main__":
         "test_04_display_empty":    ("M02:T01-01-04", "display empty"),
     }
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ProviderTest)
-    run_unittest_suite("M02:T01-01", suite, mapping)
+    run_unittest_suite("M02:T01-01 common/chat/provider", suite, mapping)

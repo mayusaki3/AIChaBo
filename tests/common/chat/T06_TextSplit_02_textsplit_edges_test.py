@@ -78,4 +78,4 @@ if __name__ == "__main__":
         "test_07_super_long_single_token": ("M02:T06-02-07", "超長トークンのハード分割"),
     }
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(TextSplitEdgesTest)
-    run_unittest_suite("M02:T06-02", suite, mapping)
+    run_unittest_suite("M02:T06-02 common/chat/textsplit", suite, mapping)

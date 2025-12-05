@@ -162,4 +162,4 @@ if __name__ == "__main__":
         "test_04_server_concurrent_lww": ("M01:T01-01-04", "server鍵: 並列 put -> LWW"),
     }
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(SecretStoreBasicTest)
-    run_unittest_suite("M01:T01-01", suite, mapping)
+    run_unittest_suite("M01:T01-01 common/secret/store", suite, mapping)

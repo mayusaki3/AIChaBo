@@ -10,7 +10,7 @@ from typing import List, Callable
 from common.chat import textsplit as M
 
 def _suite_banner() -> None:
-    print("=== M02:T06-04 unittest suite ===")
+    print("=== M02:T06-04 common/chat/textsplit unittest suite ===")
 
 def _mark(ok: bool, n: int, title: str) -> None:
     # 既存スイートと同じ書式で必ず出力
@@ -38,7 +38,7 @@ def _run_and_mark(no: int, title: str, fn):
 import atexit
 @atexit.register
 def _print_summary():
-    print(f"--- SUMMARY {_SUITE}: ✅={_pass} / ❌={_fail} / TOTAL={_total} ---")
+    print(f"--- SUMMARY {_SUITE} common/chat/textsplit: ✅={_pass} / ❌={_fail} / TOTAL={_total} ---")
 
 class TextSplitArgCompatTest(unittest.TestCase):
     @classmethod

@@ -86,4 +86,4 @@ if __name__ == "__main__":
         "test_02_extra_params_passthrough":        ("M02:T04-02-02", "extra params passthrough"),
         "test_03_provider_fn_raises_is_handled":   ("M02:T04-02-03", "provider fn raises -> handled"),
     }
-    run_unittest_suite("M02:T04-02", suite, mapping)
+    run_unittest_suite("M02:T04-02 common/chat/chat_loop", suite, mapping)

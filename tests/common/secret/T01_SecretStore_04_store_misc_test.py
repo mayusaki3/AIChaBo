@@ -421,4 +421,4 @@ if __name__ == "__main__":
         "test_29_delete_user_keys_save_raises_returns_false": ("M01:T01-04-29", "delete_user_keys _save_json例外→False"),
     }
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(SecretStoreMiscTest)
-    run_unittest_suite("M01:T01-04", suite, mapping)
+    run_unittest_suite("M01:T01-04 common/secret/store", suite, mapping)

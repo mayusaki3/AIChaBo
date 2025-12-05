@@ -79,4 +79,4 @@ if __name__ == "__main__":
         "test_01_policy_via_sessions_and_chat_core_called":           ("M02:T04-05-01", "policy via sessions → provider chat called"),
         "test_02_helper_builds_chat_fn_with_explicit_model_override": ("M02:T04-05-02", "explicit model overrides policy; extra passthrough"),
     }
-    run_unittest_suite("M02:T04-05", suite, mapping)
+    run_unittest_suite("M02:T04-05 common/chat/chat_loop", suite, mapping)

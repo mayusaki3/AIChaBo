@@ -164,4 +164,4 @@ if __name__ == "__main__":
             ("M02:T04-06-05", "provider raises -> error message"),
     }
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ChatLoopPathsCoverTest)
-    run_unittest_suite("M02:T04-06", suite, mapping)
+    run_unittest_suite("M02:T04-06 common/chat/chat_loop", suite, mapping)

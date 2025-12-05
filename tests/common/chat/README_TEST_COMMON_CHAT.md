@@ -23,6 +23,10 @@
 | **T06-04** | TextSplit Arg/Compat | 互換レイヤ（self バインド/省略/既定値）と JA append 分岐の網羅 | `common/chat/textsplit.py` |
 | **T07-01** | Continuation Flow | 会話継続（履歴＋入力→応答生成）・textsplit連携・例外処理・分岐網羅 | `common/chat/continuation.py` |
 | **T07-02** | Continuation (Edges)      | `max_steps=0`/空チャンク/例外時フォールバック/非文字列応答/辞書入力を網羅 | `common/chat/continuation.py`       |
+| **T07-03** | 継続チャット内部ガード | policy 正規化 / 分割結果の変則型 / 補助関数のガード経路 | `common/chat/continuation.py` |
+| **T07-04** | 継続チャット内部ガード2  | 末尾テキスト抽出の例外ガード / `split_text` 戻り値のフォールバック（str・未知型・空文字）/ `continue_chat` の `str()` 例外と応答空ガード | `common/chat/continuation.py`       |
+| **T07-05** | 継続チャット詳細ガード | 末尾テキスト抽出とステップ用メッセージ構築のガード（想定外型・空リスト・split_text 空文字列結果） | `common/chat/continuation.py` |
+| **T07-06** | 継続チャット top-level ガード | `tail_text` 空時と `_split_into_chunks` が `None` を返す場合の早期リターン／`chat_fn` 未呼び出しを確認 | `common/chat/continuation.py` |
 | **T08-01** | Sharing Session | セッション共有（export/import/guild共有/互換）・冪等性・サニタイズ | `common/chat/sharing.py` |
 
 ---
@@ -218,6 +222,14 @@ python -m tests.common.chat.T04_ChatLoop_07_chat_loop_helpers_test
 | **T05-01-06** | トリム規則 | content 前後空白の扱い（保持/除去は実装に追従） | `common/chat/message.py` |
 | **T05-01-07** | 結合ユーティリティ | 複数要素の結合（区切り文字・改行含む） | `common/chat/message.py` |
 | **T05-01-08** | 破損要素スキップ | 欠落 `content` 要素をスキップ | `common/chat/message.py` |
+| **T05-01-09** | dict入力（正常） | `{"role":"assistant","content":"hi"}` を 1件のメッセージに正規化 | `common/chat/message.py` |
+| **T05-01-10** | dict入力（content欠落） | `content` を持たない dict 入力はメッセージ化せず空リストとする | `common/chat/message.py` |
+| **T05-01-11** | 全要素不正配列の扱い | すべて不正要素の配列入力は全スキップし空リストを返す | `common/chat/message.py` |
+| **T05-01-12** | role補完ユーティリティ | `ensure_role` で非dict要素を無視し、dict要素に `default_role` を補完 | `common/chat/message.py` |
+| **T05-01-13** | 結合ユーティリティ（スキップ条件） | `join_messages` で非dict・欠落`content`・非文字列・空文字をスキップして結合 | `common/chat/message.py` |
+| **T05-01-14** | 結合ユーティリティ（空入力） | `None` / 空配列入力時は空文字を返す | `common/chat/message.py` |
+| **T05-01-15** | 結合ユーティリティ（文字列透過） | 文字列入力時はそのまま返す（後方互換） | `common/chat/message.py` |
+| **T05-01-16** | 結合ユーティリティ（非イテラブルガード） | 非イテラブル入力時に例外を出さず空文字を返す | `common/chat/message.py` |
 
 ```bash
 python -m tests.common.chat.T05_Message_01_message_test
@@ -326,6 +338,66 @@ python -m tests.common.chat.T07_Continuation_01_continuation_test
 
 ```bash
 python -m tests.common.chat.T07_Continuation_02_continuation_edges_test
+```
+
+---
+### T07-03: 継続チャット内部ガード
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **M02:T07-03-01** | policy 正規化 | `policy` が `None` または dict 以外の値でも `_resolve_policy` により空 dict に正規化されることを確認 | `common/chat/continuation.py` |
+| **M02:T07-03-02** | 非 list メッセージのガード | `messages` が list 以外の場合、`_extract_tail_text` が空文字列を返し安全に終了することを確認 | `common/chat/continuation.py` |
+| **M02:T07-03-03** | 分割結果の変則型対応 | `textsplit.split_text` の戻り値が dict / list / 想定外型の各パターンで `_split_into_chunks` が空文字・非文字列をスキップしつつ安全にチャンク化することを確認 | `common/chat/continuation.py` |
+| **M02:T07-03-04** | ステップメッセージ構築ガード | `_prepare_step_messages` において、`base_messages` が非 list / 空 list / 末尾要素が dict・str 以外の場合でも、チャンクを含むメッセージ列を安全に構築できることを確認 | `common/chat/continuation.py` |
+| **M02:T07-03-05** | max_steps / 返信文字列化エラーガード | `continue_chat` で `max_steps` が数値変換不能な値でも例外にならず、またチャット関数の返り値の `__str__` が例外を投げても落ちずに結果から除外されることを確認 | `common/chat/continuation.py` |
+
+```bash
+python -m tests.common.chat.T07_Continuation_03_continuation_guards_test
+```
+
+---
+### T07-04: 継続チャット内部ガード（フォールバック完全網羅）
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T07-04-01** | 末尾テキスト抽出の例外ガード | list サブクラスで `__getitem__` 例外を発生させ、`_extract_tail_text` の `except` 経路を確認 | `common/chat/continuation.py` |
+| **T07-04-02** | `split_text` が文字列を返す場合 | `textsplit.split_text` が `str` を返すケースで、`_split_into_chunks` がその文字列を 1 チャンクとして扱うことを確認 | `common/chat/continuation.py` |
+| **T07-04-03** | `split_text` が未知型を返す場合 | `split_text` が dict/list/tuple/str 以外を返したとき、元テキスト全体を 1 チャンクとして扱うフォールバック枝を確認 | `common/chat/continuation.py` |
+| **T07-04-04** | 空テキスト分割ガード | `text=""` 入力時に `_split_into_chunks` が即座に空リストを返すガードを確認 | `common/chat/continuation.py` |
+| **T07-04-05** | `continue_chat` 応答空・str() 例外ガード | `max_steps` キャスト失敗 + `reply.__str__` 例外発生時でも落ちず、`responses` が空のまま `""` を返す経路を確認 | `common/chat/continuation.py` |
+| T07-04-06 | dict `"chunks"` 非 list/tuple ガード | `_split_into_chunks` が `{"chunks": <非 list/tuple>}` を受け取った場合に空リストへフォールバックする経路 | `common/chat/continuation.py` |
+
+```bash
+python -m tests.common.chat.T07_Continuation_04_continuation_guards2_test
+```
+
+---
+### T07-05: 継続チャット詳細ガード
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T07-05-01** | 末尾テキスト抽出 | 末尾が str → そのまま返す | `common/chat/continuation.py` |
+| **T07-05-02** | 末尾テキスト抽出 | 末尾が dict/str 以外 → 空文字を返す | `common/chat/continuation.py` |
+| **T07-05-03** | step メッセージ構築 | 末尾が想定外型 → chunk を append | `common/chat/continuation.py` |
+| **T07-05-04** | step メッセージ構築 | base が list 以外 → `[chunk]` のみ返す | `common/chat/continuation.py` |
+| **T07-05-05** | step メッセージ構築 | base が空 list → `[chunk]` のみ返す | `common/chat/continuation.py` |
+| **T07-05-06** | split_text 結果の dict-chunks ガード | dict だが `"chunks"` が list/tuple 以外 → `[]` を返す | `common/chat/continuation.py` |
+
+```bash
+python -m tests.common.chat.T07_Continuation_05_continuation_tail_and_prepare_test
+```
+
+---
+### T07-06: 継続チャット top-level ガード
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T07-06-01** | tail_text 空時の早期リターン | `_extract_tail_text` の結果（`tail_text`）が空文字列の場合に、`continue_chat` が即座に `""` を返し `chat_fn` が一度も呼ばれないことを確認 | `common/chat/continuation.py` |
+| **T07-06-02** | 分割失敗時のフォールバック抑止 | `_split_into_chunks` が `None` を返すケース（内部で `textsplit.split_text` が例外を投げた想定）で、`continue_chat` が `""` を返し `chat_fn` を呼ばないことを確認 | `common/chat/continuation.py` |
+| **T07-06-03** | 非文字列応答の正常結合 | `chat_fn` が `str` 以外のオブジェクトを返しても `str()` 正常経路で `responses` に追加され、結合結果として返されることを確認 | `common/chat/continuation.py` |
+
+```bash
+python -m tests.common.chat.T07_Continuation_06_continuation_top_level_guards_test
 ```
 
 ---

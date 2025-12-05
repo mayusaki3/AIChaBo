@@ -90,6 +90,101 @@ class MessageUtilTest(unittest.TestCase):
         self.assertTrue(any(m.get("content") == "ok" for m in out))
 
 
+    # [T05-01-09] dict入力（正常）
+    def test_09_normalize_dict_ok(self):
+        from common.chat import message as M
+
+        src = {"role": "assistant", "content": "hi"}
+        out = M.normalize_messages(src)
+
+        self.assertIsInstance(out, list)
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["role"], "assistant")
+        self.assertEqual(out[0]["content"], "hi")
+
+    # [T05-01-10] dict入力（contentなし）→ 空リスト
+    def test_10_normalize_dict_missing_content(self):
+        from common.chat import message as M
+
+        src = {"role": "assistant"}
+        out = M.normalize_messages(src)
+
+        self.assertIsInstance(out, list)
+        self.assertEqual(len(out), 0)
+
+    # [T05-01-11] リストがすべて不正要素 → 空リスト
+    def test_11_normalize_list_all_invalid(self):
+        from common.chat import message as M
+
+        src = [
+            {"role": "user"},   # contentなし → _coerce_one -> None
+            123,                # 非dict/非str → _coerce_one -> None
+        ]
+        out = M.normalize_messages(src)
+
+        self.assertIsInstance(out, list)
+        self.assertEqual(len(out), 0)
+
+    # [T05-01-12] ensure_role は非dict要素を無視し、roleを補完
+    def test_12_ensure_role_skips_non_dict(self):
+        from common.chat import message as M
+
+        src = [
+            {"content": "x"},  # roleなし → default_role付与
+            "y",               # 非dict → スキップされるはず
+        ]
+
+        out = M.ensure_role(src, default_role="assistant")
+
+        # 非dictは落ちて、dictだけが残る
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["content"], "x")
+        self.assertEqual(out[0]["role"], "assistant")
+
+    # [T05-01-13] join_messages は不正要素をスキップ
+    def test_13_join_messages_skips_invalid(self):
+        from common.chat import message as M
+
+        msgs = [
+            {"role": "user", "content": "ok"},   # 採用
+            "NG",                                # 非dict → 無視
+            {"role": "user"},                    # contentなし → 無視
+            {"role": "user", "content": 123},    # 非str → 無視
+            {"role": "user", "content": ""},     # 空文字 → 実装次第だが、通常はスキップ
+            {"role": "user", "content": "fine"}, # 採用
+        ]
+
+        out = M.join_messages(msgs, sep="|")
+        self.assertEqual(out, "ok|fine")
+
+    # [T05-01-14] join_messages: None/空入力は空文字を返す
+    def test_14_join_messages_empty_input(self):
+        from common.chat import message as M
+
+        # None → 空文字
+        out_none = M.join_messages(None)
+        self.assertEqual(out_none, "")
+
+        # 空リスト → 空文字
+        out_empty_list = M.join_messages([])
+        self.assertEqual(out_empty_list, "")
+
+    # [T05-01-15] join_messages: 文字列入力はそのまま返す
+    def test_15_join_messages_string_passthrough(self):
+        from common.chat import message as M
+
+        out = M.join_messages("hello")
+        self.assertEqual(out, "hello")
+
+    # [T05-01-16] join_messages: 非イテラブル入力は TypeError を握り潰して空文字
+    def test_16_join_messages_non_iterable_guard(self):
+        from common.chat import message as M
+
+        # int などイテラブルでないものが来ても落ちずに空文字を返す
+        out = M.join_messages(123)  # type: ignore[arg-type]
+        self.assertEqual(out, "")
+
+
 if __name__ == "__main__":
     mapping = {
         "test_01_normalize_str": ("M02:T05-01-01", '文字列の正規化 -> [{"role":"user","content":"..."}]'),
@@ -100,6 +195,14 @@ if __name__ == "__main__":
         "test_06_trim": ("M02:T05-01-06", "トリム規則"),
         "test_07_join": ("M02:T05-01-07", "結合ユーティリティ"),
         "test_08_skip_broken": ("M02:T05-01-08", "破損要素スキップ"),
+        "test_09_normalize_dict_ok": ("M02:T05-01-09", "dict入力（role+content 正常）"),
+        "test_10_normalize_dict_missing_content": ("M02:T05-01-10","dict入力（content欠落時はメッセージ化しない）"),
+        "test_11_normalize_list_all_invalid": ("M02:T05-01-11","リストがすべて不正要素の場合は空リスト"),
+        "test_12_ensure_role_skips_non_dict": ("M02:T05-01-12","role補完ユーティリティ: 非dict要素をスキップ"),
+        "test_13_join_messages_skips_invalid": ("M02:T05-01-13","結合ユーティリティ: 不正要素・空文字をスキップして結合"),
+        "test_14_join_messages_empty_input": ("M02:T05-01-14","結合ユーティリティ: None/空入力は空文字を返す"),
+        "test_15_join_messages_string_passthrough": ("M02:T05-01-15","結合ユーティリティ: 文字列入力はそのまま返す"),
+        "test_16_join_messages_non_iterable_guard": ("M02:T05-01-16","結合ユーティリティ: 非イテラブル入力のガード"),
     }
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(MessageUtilTest)
-    run_unittest_suite("M02:T05-01", suite, mapping)
+    run_unittest_suite("M02:T05-01 common/chat/message", suite, mapping)

@@ -42,6 +42,10 @@ coverage run -a -m tests.common.chat.T06_TextSplit_04_textsplit_arg_compat_test
 # T07 : common/chat/continuation.py
 coverage run -a -m tests.common.chat.T07_Continuation_01_continuation_test
 coverage run -a -m tests.common.chat.T07_Continuation_02_continuation_edges_test
+coverage run -a -m tests.common.chat.T07_Continuation_03_continuation_guards_test
+coverage run -a -m tests.common.chat.T07_Continuation_04_continuation_guards2_test
+coverage run -a -m tests.common.chat.T07_Continuation_05_continuation_tail_and_prepare_test
+coverage run -a -m tests.common.chat.T07_Continuation_06_continuation_top_level_guards_test
 
 # T08 : common/chat/sharing.py
 # coverage run -a -m tests.common.chat.T07_Continuation_01_continuation_test

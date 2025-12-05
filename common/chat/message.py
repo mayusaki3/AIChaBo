@@ -87,17 +87,42 @@ def _normalize_messages_impl(src: Union[str, Message, Sequence[Any]]) -> Message
 
     raise TypeError("unsupported message input type")
 
+def _join_messages_impl(messages: Any, sep: str = "\n") -> str:
+    """
+    メッセージ配列から content を取り出して結合するユーティリティ。
 
-def _join_messages_impl(messages: Iterable[Message], sep: str = "") -> str:
+    - dict 以外の要素はスキップ
+    - content が str 以外の要素はスキップ
+    - 空文字列 "" はスキップ
     """
-    メッセージ配列を content で連結して返す。
-    - content が文字列でない要素はスキップ
-    """
-    parts: List[str] = []
-    for m in messages:
-        c = m.get("content")
-        if isinstance(c, str):
+    # None や空はそのまま空文字
+    if not messages:
+        return ""
+
+    # 文字列そのものが渡された場合は、そのまま返す（後方互換）
+    if isinstance(messages, str):
+        return messages
+
+    parts: list[str] = []
+
+    try:
+        for m in messages:
+            # dict 以外は無視
+            if not isinstance(m, dict):
+                continue
+
+            c = m.get("content")
+            # 非文字列 or 空文字はスキップ
+            if not isinstance(c, str):
+                continue
+            if not c:
+                continue
+
             parts.append(c)
+    except TypeError:
+        # messages がイテラブルでないなど、想定外の型の場合は空文字
+        return ""
+
     return sep.join(parts)
 
 

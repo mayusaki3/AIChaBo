@@ -99,4 +99,4 @@ if __name__ == "__main__":
         "test_03_provider_returns_none_is_stringified":    ("M02:T04-04-03", 'provider returns None -> "None" string'),
     }
     from tests._report import run_unittest_suite
-    run_unittest_suite("M02:T04-04", suite, mapping)
+    run_unittest_suite("M02:T04-04 common/chat/chat_loop", suite, mapping)

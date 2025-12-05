@@ -93,4 +93,4 @@ if __name__ == "__main__":
         "test_03_happy_path_with_patched_env":       ("M02:T04-01-03", "happy path (patched)"),
         "test_04_invalid_provider_message":          ("M02:T04-01-04", "invalid provider -> message"),
     }
-    run_unittest_suite("M02:T04-01", suite, mapping)
+    run_unittest_suite("M02:T04-01 common/chat/chat_loop", suite, mapping)

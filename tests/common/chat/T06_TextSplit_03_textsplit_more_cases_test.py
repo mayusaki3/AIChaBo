@@ -95,4 +95,4 @@ if __name__ == "__main__":
         "test_07_max_chars_cast_and_errors": ("M02:T06-03-07", "max_chars キャスト/境界"),
     }
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(TextSplitMoreCasesTest)
-    run_unittest_suite("M02:T06-03", suite, mapping)
+    run_unittest_suite("M02:T06-03 common/chat/textsplit", suite, mapping)

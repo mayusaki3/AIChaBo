@@ -209,4 +209,4 @@ mapping = {
 
 if __name__ == "__main__":
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(SecretStoreInitTest)
-    run_unittest_suite("M01:T01-03", suite, mapping)
+    run_unittest_suite("M01:T01-03 common/secret/store", suite, mapping)

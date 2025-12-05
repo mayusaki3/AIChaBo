@@ -127,4 +127,4 @@ if __name__ == "__main__":
         "test_08_none_reply": ("M02:T07-01-08", "None 応答"),
     }
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ContinuationFlowTest)
-    run_unittest_suite("M02:T07-01", suite, mapping)
+    run_unittest_suite("M02:T07-01 common\chat\continuation", suite, mapping)

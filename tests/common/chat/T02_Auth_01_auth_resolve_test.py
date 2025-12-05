@@ -137,4 +137,4 @@ if __name__ == "__main__":
         "test_06_missing_model":           ("M02:T02-01-06", "missing model -> {}"),
         "test_07_ssm_used_when_usm_absent":("M02:T02-01-07", "use SSM when USM absent"),
     }
-    run_unittest_suite("M02:T02-01", suite, mapping)
+    run_unittest_suite("M02:T02-01 common/chat/auth", suite, mapping)

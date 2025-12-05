@@ -115,4 +115,4 @@ if __name__ == "__main__":
         "test_04_provider_returns_empty_string":     ("M02:T04-03-04", "provider returns empty string"),
         "test_05_provider_fn_is_none":               ("M02:T04-03-05", "provider fn None -> handled"),
     }
-    run_unittest_suite("M02:T04-03", suite, mapping)
+    run_unittest_suite("M02:T04-03 common/chat/chat_loop", suite, mapping)

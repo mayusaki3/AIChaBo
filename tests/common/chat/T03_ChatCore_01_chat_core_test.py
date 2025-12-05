@@ -102,4 +102,4 @@ if __name__ == "__main__":
         "test_05_echo_without_chat_fn":        ("M02:T03-01-05", "echo without chat_fn"),
         "test_06_chat_fn_injection_is_called": ("M02:T03-01-06", "chat_fn injection is called"),
     }
-    run_unittest_suite("M02:T03-01", suite, mapping)
+    run_unittest_suite("M02:T03-01 common/chat/chat_core", suite, mapping)

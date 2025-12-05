@@ -249,4 +249,4 @@ if __name__ == "__main__":
     }
 
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ChatLoopHelpersTest)
-    run_unittest_suite("M02:T04-07", suite, mapping)
+    run_unittest_suite("M02:T04-07 common/chat/chat_loop", suite, mapping)

@@ -89,4 +89,4 @@ if __name__ == "__main__":
         "test_08_tail_boundary": ("M02:T06-01-08", "末尾境界"),
     }
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(TextSplitTest)
-    run_unittest_suite("M02:T06-01", suite, mapping)
+    run_unittest_suite("M02:T06-01 common/chat/textsplit", suite, mapping)
