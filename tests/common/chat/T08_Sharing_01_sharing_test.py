@@ -7,6 +7,7 @@ T08-01 : Sharing Session
 
 import copy
 import unittest
+from typing import Any, Dict
 from unittest.mock import patch, MagicMock
 from tests._report import run_unittest_suite
 
@@ -38,8 +39,21 @@ class SharingTest(unittest.TestCase):
             self.skipTest("share_to_guild not found")
 
     # ベースとなるダミーセッション
-    def _base_session(self):
-        return {"id": "s1", "ts": 1, "messages": [{"role": "user", "content": "hi"}]}
+    def _base_session(self) -> Dict[str, Any]:
+        """
+        T08-01 の「基本」「部分共有」などで使うベースセッション。
+        export/import の往復で provider/model も保持されることを確認する前提なので、
+        provider/model を含めた形で定義する。
+        """
+        return {
+            "id": "s1",
+            "ts": 1,
+            "provider": "openai",
+            "model": "gpt-4o",
+            "messages": [
+                {"role": "user", "content": "hi"},
+            ],
+        }
 
     # [T08-01-01] export 基本
     def test_01_export(self):

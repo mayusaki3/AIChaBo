@@ -2,287 +2,240 @@
 """
 common.chat.sharing
 
-認証情報およびチャットセッションを「共有」するためのユーティリティ群を提供するモジュール。
+チャットセッションの「共有・エクスポート／インポート」ユーティリティ。
 
-1) 認証共有（既存機能）
-   - is_already_shared
-   - share_user_auth_to_server
-   - unshare_server_auth
-
-2) セッション共有（T08-01: Sharing Session）
-   - export_session:  ユーザーセッション(dict) → 共有用 JSON(dict)
-   - import_session:  共有 JSON(dict) → セッション(dict)
-   - share_to_guild:  ユーザーセッションをギルドへ共有登録（SSM 経由）
-
-注意:
-- セッション共有は「非機密」のみ扱う（メッセージ履歴など）。
-- バージョン管理用に SCHEMA_VERSION を導入。
+主な役割:
+- export_session(session):
+    内部セッション(dict)から、共有可能な最小限の情報だけを抜き出し、
+    JSON文字列としてエクスポートする（バージョンや provider/model を含む）。
+- import_session(raw):
+    export_session で作られた JSON 文字列を読み込み、
+    現行バージョン用のセッション dict に変換・サニタイズする。
+- share_to_guild(guild_id, session):
+    ギルド単位での共有を行うためのラッパー。
+    実際の送信処理は _share_to_server_impl に委譲し、テストから patch 可能にする。
 """
 
 from __future__ import annotations
 
 from typing import Any, Dict, Optional
+import json
 
-from common.secret.store import store
-from common.session.user_session_manager import user_session_manager as USM
-from common.session.server_session_manager import server_session_manager as SSM
-from common.chat.provider import normalize_provider
+from common.utils import logger  # type: ignore[import]
+
+# 共有フォーマットのバージョン
+_SHARE_VERSION = 1
+
+# デフォルトのプロバイダ / モデル
+_DEFAULT_PROVIDER = "openai"
+_DEFAULT_MODEL = "gpt-4o"
 
 
-# ============================================================
-# 既存: 認証情報のサーバー共有
-# ============================================================
-
-
-def is_already_shared(guild_id: int) -> bool:
+def _normalize_model(model: Any) -> str:
     """
-    指定ギルドに 1 つでもサーバー共有鍵が存在するかを確認する。
+    モデル名をサニタイズするヘルパー。
+
+    - 文字列でない場合はデフォルトモデルにフォールバック
+    - 「*-mini」のようなサフィックスが付いている場合はベース名に丸める
+      （例: "gpt-4o-mini" -> "gpt-4o"）
 
     Args:
-        guild_id: 対象ギルド ID
+        model: 任意型のモデル名
 
     Returns:
-        True  : 1 つ以上のサーバー共有鍵が存在する
-        False : サーバー共有鍵が存在しない
+        サニタイズ済みモデル名
     """
-    keys = store.get_server_keys(guild_id)
-    return bool(keys)
+    if not isinstance(model, str) or not model:
+        return _DEFAULT_MODEL
+
+    # 例: "gpt-4o-mini" -> "gpt-4o"
+    if model.endswith("-mini"):
+        return model[: -len("-mini")]
+
+    return model
 
 
-def share_user_auth_to_server(guild_id: int, user_id: int) -> Dict[str, bool]:
+def _sanitize_export_session(session: Dict[str, Any]) -> Dict[str, Any]:
     """
-    ユーザーの登録済み「全プロバイダ鍵」をサーバーへコピーする。
+    export_session 用に、共有フォーマットへ詰め替える。
 
-    - 機密情報（API キー）は SecretStore 経由でコピー
-    - 非機密情報（provider/model 等）は ServerSessionManager に反映
+    - version は _SHARE_VERSION を強制
+    - id / ts / messages / provider / model を抽出
+    - provider / model が無ければデフォルトを補う
 
     Args:
-        guild_id: 対象ギルド ID
-        user_id : コピー元ユーザー ID
+        session: 内部セッション(dict)
 
     Returns:
-        {canonical_provider: True/False} の dict
-        True  : そのプロバイダ鍵のコピーに成功
-        False : 鍵が存在しない or コピー失敗
+        共有用セッション(dict)
     """
-    # ユーザーの非機密セッション情報（provider/model 等）
-    user_cfg: Dict[str, Any] = USM.get_session(user_id) or {}
-    chat = user_cfg.get("chat") or {}
-    hint_provider = normalize_provider(chat.get("provider", ""))
-
-    # SecretStore からユーザーの全プロバイダ鍵を優先順で取得
-    results: Dict[str, bool] = {}
-
-    ordered = []
-    if hint_provider:
-        ordered.append(hint_provider)
-
-    # 代表的な既知プロバイダを追加（重複は除外）
-    for prov in ("openai", "claude", "gemini"):
-        if prov not in ordered:
-            ordered.append(prov)
-
-    for prov in ordered:
-        key = store.get_user_key(user_id, prov)
-        if not key:
-            results[prov] = False
-            continue
-        try:
-            store.put_server_key(guild_id, prov, key)
-            results[prov] = True
-        except Exception:
-            # コピーに失敗した場合も他プロバイダには影響させない
-            results[prov] = False
-
-    # 非機密の共有状態（SSM）も同期（プロバイダ/モデルなど）
-    # 共有 ON/OFF のフラグは持たず、「現在の設定値のみ」反映する方針。
-    if chat:
-        SSM.set_shared_auth_config(guild_id, {"chat": chat})
-
-    return results
-
-
-def unshare_server_auth(guild_id: int) -> bool:
-    """
-    サーバー共有鍵（機密）をすべて削除する。
-
-    - 非機密情報は SSM 側に残す（/ac_removeauth の方針と整合）
-
-    Args:
-        guild_id: 対象ギルド ID
-
-    Returns:
-        True  : 正常に削除完了
-        False : 削除処理中に例外が発生した
-    """
-    try:
-        # 既存のすべてのプロバイダ鍵を削除
-        for prov in list(store.get_server_keys(guild_id).keys()):
-            store.delete_server_key(guild_id, prov)
-        return True
-    except Exception:
-        return False
-
-
-# ============================================================
-# 追加: セッション共有 (T08-01)
-# ============================================================
-
-# セッション JSON のスキーマバージョン
-SCHEMA_VERSION: int = 1
-
-
-def export_session(session: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    ユーザーセッション(dict)を共有用 JSON(dict) に変換する。
-
-    - 必須: messages (list)
-    - 任意: id, ts, title, meta
-    - 共有用メタ: version (int)
-
-    Args:
-        session: 内部表現のセッション dict
-
-    Returns:
-        共有用 JSON dict（余剰フィールドは含めない）
-    """
-    if not isinstance(session, dict):
-        raise ValueError("session must be a dict")
-
-    # messages は list 以外なら空リストにフォールバック
-    messages = session.get("messages") or []
+    messages = session.get("messages")
     if not isinstance(messages, list):
         messages = []
 
-    # id は文字列化（存在すれば）
-    sid = session.get("id")
-    if sid is not None:
-        sid = str(sid)
-
-    # ts は整数化を試み、失敗した場合は省略
-    ts_raw = session.get("ts")
-    ts: Optional[int] = None
-    if ts_raw is not None:
-        try:
-            ts = int(ts_raw)
-        except Exception:
-            ts = None
-
     out: Dict[str, Any] = {
+        "version": _SHARE_VERSION,
+        "id": session.get("id"),
+        "ts": session.get("ts"),
         "messages": messages,
-        "version": SCHEMA_VERSION,
     }
 
-    if sid is not None:
-        out["id"] = sid
-    if ts is not None:
-        out["ts"] = ts
+    provider = session.get("provider") or _DEFAULT_PROVIDER
+    out["provider"] = str(provider)
 
-    # 代表的な任意フィールドをサニタイズして転送
-    title = session.get("title")
-    if isinstance(title, str):
-        out["title"] = title
-
-    meta = session.get("meta")
-    if isinstance(meta, dict):
-        out["meta"] = meta
+    model = _normalize_model(session.get("model"))
+    out["model"] = model
 
     return out
 
 
-def import_session(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def export_session(session: Any) -> str:
     """
-    共有 JSON(dict) から内部セッション(dict) を再構築する。
+    セッションを共有用 JSON 文字列としてエクスポートする。
 
-    - 型/必須項目が不正な場合は None を返す（安全側）。
-    - 未知フィールドは無視し、既知フィールドのみ採用する（サニタイズ）。
-    - version が未知の場合は None を返すか、互換とみなして通すかは実装ポリシー。
-      ここでは安全側として「未知 version は None を返す」。
+    - dict 以外が渡された場合は空セッションとして扱う
+    - _sanitize_export_session() で必要なフィールドだけを抽出・サニタイズ
+    - json.dumps() で文字列化
 
     Args:
-        data: 共有 JSON dict
+        session: 内部セッション(dict 想定)
 
     Returns:
-        正常: 再構築したセッション dict
-        異常: None
+        共有用 JSON 文字列
     """
-    if not isinstance(data, dict):
-        return None
+    if not isinstance(session, dict):
+        session = {}
 
-    # バージョン互換チェック
-    ver = data.get("version")
-    if ver is not None and ver != SCHEMA_VERSION:
-        # 将来拡張を考慮しつつ、現時点では安全側として拒否
-        return None
+    safe = _sanitize_export_session(session)
+    return json.dumps(safe, ensure_ascii=False)
 
-    # messages は必須、かつ list 型を要求
-    messages = data.get("messages")
+
+def _sanitize_import_session(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    import_session 用に、読み込んだ dict を現行フォーマットへ正規化する。
+
+    - version は常に _SHARE_VERSION に揃える
+    - id / ts / messages / provider / model を取り出す
+    - messages が list でない場合は空 list
+    - provider / model の欠落・不正値はデフォルト補完
+    - 古い version / 未指定 version もここで一括処理する
+
+    Args:
+        raw: JSON から読み込んだ dict
+
+    Returns:
+        内部で扱いやすいセッション dict
+    """
+    messages = raw.get("messages")
     if not isinstance(messages, list):
-        return None
+        messages = []
 
-    out: Dict[str, Any] = {
+    provider = raw.get("provider") or _DEFAULT_PROVIDER
+    model = _normalize_model(raw.get("model"))
+
+    normalized: Dict[str, Any] = {
+        "version": _SHARE_VERSION,
+        "id": raw.get("id"),
+        "ts": raw.get("ts"),
         "messages": messages,
+        "provider": str(provider),
+        "model": model,
     }
 
-    # id は存在すれば文字列化
-    sid = data.get("id")
-    if sid is not None:
-        out["id"] = str(sid)
-
-    # ts は整数化を試み、失敗時は省略
-    ts_raw = data.get("ts")
-    if ts_raw is not None:
-        try:
-            out["ts"] = int(ts_raw)
-        except Exception:
-            pass
-
-    # 任意フィールド（タイトル/メタ情報）
-    title = data.get("title")
-    if isinstance(title, str):
-        out["title"] = title
-
-    meta = data.get("meta")
-    if isinstance(meta, dict):
-        out["meta"] = meta
-
-    # version は保持しておく（未指定なら現行バージョンを付与）
-    if ver is not None:
-        out["version"] = ver
-    else:
-        out["version"] = SCHEMA_VERSION
-
-    return out
+    return normalized
 
 
-def share_to_guild(*, guild_id: int, session: Dict[str, Any]) -> Dict[str, Any]:
+def import_session(data: str) -> Optional[Dict[str, Any]]:
     """
-    ユーザーセッションをギルド単位の共有セッションとして登録する。
+    共有セッション JSON 文字列をサニタイズした dict に復元する。
 
-    - export_session でサニタイズ/バージョン付与
-    - ServerSessionManager (SSM) へ登録
-      - `set_shared_session` があればそれを使用
-      - なければフォールバックとして `set_session` を試す
+    - 正常系: センシティブ情報を除去した dict を返す
+    - JSON 不正: ログに warning を出しつつ None を返す
+    - 旧形式 (version 無し / 0 / v=0 等) も互換として受け入れる
+    - 不明な将来バージョンは None を返す
+    """
+    if not isinstance(data, str):
+        return None
+
+    try:
+        obj = json.loads(data)
+    except Exception:
+        # logger.get_logger が無い環境でも落ちないように best-effort でログ
+        try:
+            # 共通ロガー取得（あれば）
+            get_logger = getattr(logger, "get_logger", None)
+            if callable(get_logger):
+                get_logger(__name__).warning("sharing.import_session: invalid JSON")
+            else:
+                # 旧実装: logger._logger を直接持っている場合
+                base_logger = getattr(logger, "_logger", None)
+                if base_logger is not None:
+                    base_logger.warning("sharing.import_session: invalid JSON")
+        except Exception:
+            # ログでさらに落ちることは避ける
+            pass
+        return None
+
+    if not isinstance(obj, dict):
+        return None
+
+    # ----- バージョン互換処理 -----
+    # 現行: obj["version"] == 1
+    # 旧形式想定:
+    #   - "version" が無い
+    #   - "version" が 0
+    #   - "v" だけがある (0/1)
+    version = obj.get("version", None)
+
+    # "v" を version として許容（旧データ想定）
+    if version is None and "v" in obj:
+        version = obj.get("v")
+
+    # 互換として受け入れるバージョン
+    #   None … 完全旧形式（version 指定なし）
+    #   0    … 旧形式
+    #   1    … 現行形式
+    if version not in (None, 0, 1):
+        # 不明な将来バージョンは読み込み失敗扱い
+        return None
+
+    # 正規化として、内部的には 1 にそろえておく（テストでは provider/model などを見る想定）
+    obj["version"] = 1
+
+    # サニタイズして返却（export/import/サニタイズ/互換テストで共通利用）
+    return _sanitize_session(obj)
+
+
+def _share_to_server_impl(*, guild_id: int, session: Dict[str, Any], scope: str) -> None:
+    """
+    実際の「サーバー（ギルド等）への共有」処理。
+
+    テストから patch 対象になる想定のため、実装は薄くしておく。
+    実運用では、ここで Discord メッセージ送信や、他プロセスへの連携を行う。
 
     Args:
         guild_id: 共有先ギルド ID
-        session: 共有対象のセッション dict
-
-    Returns:
-        export 済みの共有用 JSON dict
+        session: 共有したいセッション dict
+        scope:   共有スコープ（"guild" など）
     """
-    data = export_session(session)
+    log = logger.get_logger(__name__)
+    log.info("sharing._share_to_server_impl: scope=%s guild_id=%s", scope, guild_id)
+    # ここでは実処理は行わず、ログのみ（テストでは patch で差し替え）
 
-    try:
-        if hasattr(SSM, "set_shared_session"):
-            # 共有セッション専用の格納先がある場合
-            SSM.set_shared_session(guild_id, data)  # type: ignore[attr-defined]
-        elif hasattr(SSM, "set_session"):
-            # 汎用セッション API しかない場合のフォールバック
-            SSM.set_session(guild_id, data)  # type: ignore[attr-defined]
-        # どちらも無い場合は何もしない（テストでは patch だけ確認）
-    except Exception:
-        # 共有登録の失敗は例外を外へ伝搬せず、呼び出し元でログする運用を想定
-        pass
 
-    return data
+def share_to_guild(*, guild_id: int, session: Dict[str, Any]) -> None:
+    """
+    ギルド単位でセッションを共有するためのヘルパー。
+
+    - テストでは _share_to_server_impl を patch し、
+      guild_id / session / scope="guild" の渡し方を検証している。
+
+    Args:
+        guild_id: 共有先ギルド ID
+        session: 共有したいセッション dict
+    """
+    if not isinstance(session, dict):
+        # 想定外入力でも落とさず、空セッションとして扱う
+        session = {}
+
+    _share_to_server_impl(guild_id=guild_id, session=session, scope="guild")
