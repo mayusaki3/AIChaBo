@@ -28,6 +28,7 @@
 | **T07-05** | 継続チャット詳細ガード | 末尾テキスト抽出とステップ用メッセージ構築のガード（想定外型・空リスト・split_text 空文字列結果） | `common/chat/continuation.py` |
 | **T07-06** | 継続チャット top-level ガード | `tail_text` 空時と `_split_into_chunks` が `None` を返す場合の早期リターン／`chat_fn` 未呼び出しを確認 | `common/chat/continuation.py` |
 | **T08-01** | Sharing Session | セッション共有（export/import/guild共有/互換）・冪等性・サニタイズ | `common/chat/sharing.py` |
+| **T08-02** | Sharing Migration | 旧フォーマットから現行セッション形式への移行（version/フィールド補完・安全なフォールバック） | `common/chat/sharing.py` |
 
 ---
 
@@ -416,6 +417,21 @@ python -m tests.common.chat.T07_Continuation_06_continuation_top_level_guards_te
 
 ```bash
 python -m tests.common.chat.T08_Sharing_01_sharing_test
+```
+
+---
+### T08-02 : Sharing Migration
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T08-02-01** | 旧形式 dict 入力のマイグレーション | `version` 無し + `history` キーを持つ dict を `import_session` が受け取り、`messages` への変換・最小限のフィールド補完を行う | `common/chat/sharing.py` |
+| **T08-02-02** | 旧形式 JSON(v0) のマイグレーション | `{"version":0,"provider":...,"model":...,"history":[...]}` のような JSON 文字列から、`version>=1` かつ `messages` 付きのセッション dict を構築できることを確認 | `common/chat/sharing.py` |
+| **T08-02-03** | 余剰フィールド付き旧形式のサニタイズ | 旧形式に `unknown`/`token_count` 等の余剰キーが混在していても、migration + sanitize 後のセッション dict からは除外されることを確認 | `common/chat/sharing.py` |
+| **T08-02-04** | version 型不整合のフォールバック | `version` が文字列や負数など不正な場合でも例外とならず、`version>=1` の数値に補正される or version 未指定として扱われることを確認 | `common/chat/sharing.py` |
+| **T08-02-05** | dict 直接入力の互換性 | すでに `messages` を持つ dict（version 無し）を `import_session` に直接渡した場合でも、安全に現行セッション dict に正規化されることを確認 | `common/chat/sharing.py` |
+
+```bash
+python -m tests.common.chat.T08_Sharing_02_migration_test
 ```
 
 ---

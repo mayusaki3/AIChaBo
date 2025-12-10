@@ -49,6 +49,7 @@ coverage erase
 
 # T08 : common/chat/sharing.py
 coverage run -a -m tests.common.chat.T08_Sharing_01_sharing_test
+coverage run -a -m tests.common.chat.T08_Sharing_02_migration_test
 
 # T09 : common/chat/
 # coverage run -a -m tests.common.chat.T07_Continuation_01_continuation_test

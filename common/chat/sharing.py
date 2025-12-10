@@ -23,6 +23,32 @@ import json
 
 from common.utils import logger  # type: ignore[import]
 
+def _log_warning(message: str) -> None:
+    """
+    logger 実装差異に依存しない warning 出力ヘルパー。
+
+    優先順:
+      1. logger.get_logger(__name__) があればそれを使う
+      2. logger._logger があればそれを使う
+      3. どちらもなければ print にフォールバック
+    """
+    try:
+        get_logger = getattr(logger, "get_logger", None)
+        if callable(get_logger):
+            get_logger(__name__).warning(message)
+            return
+
+        base_logger = getattr(logger, "_logger", None)
+        if base_logger is not None:
+            base_logger.warning(message)
+            return
+    except Exception:
+        # ログ出力でテストを壊したくないので例外は握り潰す
+        pass
+
+    # logger が使えない環境用の最後のフォールバック
+    print(f"[WARNING] {message}")
+
 # 共有フォーマットのバージョン
 _SHARE_VERSION = 1
 
@@ -89,6 +115,16 @@ def _sanitize_export_session(session: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+def _sanitize_session(obj: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    import/export 共通のセッションサニタイズ処理。
+
+    現状は export 時のサニタイズと同じルールでフィールドを絞り込む。
+    将来的に import 専用の追加ルールが必要になった場合は、この関数を拡張する。
+    """
+    return _sanitize_export_session(obj)
+
+
 def export_session(session: Any) -> str:
     """
     セッションを共有用 JSON 文字列としてエクスポートする。
@@ -147,37 +183,22 @@ def _sanitize_import_session(raw: Dict[str, Any]) -> Dict[str, Any]:
 
 def import_session(data: str) -> Optional[Dict[str, Any]]:
     """
-    共有セッション JSON 文字列をサニタイズした dict に復元する。
+    共有文字列からセッション dict を復元する。
 
-    - 正常系: センシティブ情報を除去した dict を返す
-    - JSON 不正: ログに warning を出しつつ None を返す
-    - 旧形式 (version 無し / 0 / v=0 等) も互換として受け入れる
-    - 不明な将来バージョンは None を返す
+    - 正常: サニタイズ済み dict を返す
+    - 不正 JSON: ログを出し、空 dict を返す（テストは dict を期待）
     """
-    if not isinstance(data, str):
-        return None
-
     try:
         obj = json.loads(data)
-    except Exception:
-        # logger.get_logger が無い環境でも落ちないように best-effort でログ
-        try:
-            # 共通ロガー取得（あれば）
-            get_logger = getattr(logger, "get_logger", None)
-            if callable(get_logger):
-                get_logger(__name__).warning("sharing.import_session: invalid JSON")
-            else:
-                # 旧実装: logger._logger を直接持っている場合
-                base_logger = getattr(logger, "_logger", None)
-                if base_logger is not None:
-                    base_logger.warning("sharing.import_session: invalid JSON")
-        except Exception:
-            # ログでさらに落ちることは避ける
-            pass
-        return None
+    except json.JSONDecodeError:
+        _log_warning("sharing.import_session: invalid JSON")
+        # テスト T08-01-04 は dict を期待しているため、None ではなく {} を返す
+        return {}
 
     if not isinstance(obj, dict):
-        return None
+        _log_warning("sharing.import_session: non-dict JSON")
+        # こちらも dict を返すことで呼び出し側の扱いを単純化
+        return {}
 
     # ----- バージョン互換処理 -----
     # 現行: obj["version"] == 1
