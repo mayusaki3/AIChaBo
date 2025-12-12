@@ -1,262 +1,193 @@
-# -*- coding: utf-8 -*-
 """
 common.chat.sharing
 
-チャットセッションの「共有・エクスポート／インポート」ユーティリティ。
-
-主な役割:
-- export_session(session):
-    内部セッション(dict)から、共有可能な最小限の情報だけを抜き出し、
-    JSON文字列としてエクスポートする（バージョンや provider/model を含む）。
-- import_session(raw):
-    export_session で作られた JSON 文字列を読み込み、
-    現行バージョン用のセッション dict に変換・サニタイズする。
-- share_to_guild(guild_id, session):
-    ギルド単位での共有を行うためのラッパー。
-    実際の送信処理は _share_to_server_impl に委譲し、テストから patch 可能にする。
+T08-01 / T08-02 のテスト仕様をすべて満たすための共有モジュール。
 """
 
 from __future__ import annotations
-
-from typing import Any, Dict, Optional
 import json
+import copy
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Union
 
-from common.utils import logger  # type: ignore[import]
+from common.session import server_session_manager as server_session_manager
 
-def _log_warning(message: str) -> None:
-    """
-    logger 実装差異に依存しない warning 出力ヘルパー。
+SSM = server_session_manager.ServerSessionManager
+_CURRENT_VERSION = 1
 
-    優先順:
-      1. logger.get_logger(__name__) があればそれを使う
-      2. logger._logger があればそれを使う
-      3. どちらもなければ print にフォールバック
-    """
+# -------------------------------
+# 内部型
+# -------------------------------
+@dataclass
+class _NormalizedSession:
+    version: int
+    session_id: Optional[str]
+    ts: Optional[int]
+    provider: Optional[str]
+    model: Optional[str]
+    messages: List[Any]
+    meta: Dict[str, Any]
+
+
+def _to_int_or_none(v: Any) -> Optional[int]:
     try:
-        get_logger = getattr(logger, "get_logger", None)
-        if callable(get_logger):
-            get_logger(__name__).warning(message)
-            return
-
-        base_logger = getattr(logger, "_logger", None)
-        if base_logger is not None:
-            base_logger.warning(message)
-            return
+        return int(v)
     except Exception:
-        # ログ出力でテストを壊したくないので例外は握り潰す
-        pass
-
-    # logger が使えない環境用の最後のフォールバック
-    print(f"[WARNING] {message}")
-
-# 共有フォーマットのバージョン
-_SHARE_VERSION = 1
-
-# デフォルトのプロバイダ / モデル
-_DEFAULT_PROVIDER = "openai"
-_DEFAULT_MODEL = "gpt-4o"
+        return None
 
 
-def _normalize_model(model: Any) -> str:
-    """
-    モデル名をサニタイズするヘルパー。
+# -------------------------------
+# 旧形式の正規化
+# -------------------------------
+def _normalize_legacy_session(obj: Dict[str, Any]) -> _NormalizedSession:
+    if not isinstance(obj, dict):
+        return _NormalizedSession(
+            version=_CURRENT_VERSION,
+            session_id=None,
+            ts=None,
+            provider=None,
+            model=None,
+            messages=[],
+            meta={},
+        )
 
-    - 文字列でない場合はデフォルトモデルにフォールバック
-    - 「*-mini」のようなサフィックスが付いている場合はベース名に丸める
-      （例: "gpt-4o-mini" -> "gpt-4o"）
+    raw_version = obj.get("version")
+    ver = _to_int_or_none(raw_version)
 
-    Args:
-        model: 任意型のモデル名
+    # v0 JSON の場合
+    if ver == 0 and isinstance(obj.get("session"), dict):
+        base = obj["session"]
+    else:
+        base = obj
 
-    Returns:
-        サニタイズ済みモデル名
-    """
-    if not isinstance(model, str) or not model:
-        return _DEFAULT_MODEL
+    if not isinstance(base, dict):
+        base = {}
 
-    # 例: "gpt-4o-mini" -> "gpt-4o"
-    if model.endswith("-mini"):
-        return model[: -len("-mini")]
+    session_id = base.get("id") or base.get("session_id")
+    ts = base.get("ts") or base.get("timestamp")
 
-    return model
-
-
-def _sanitize_export_session(session: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    export_session 用に、共有フォーマットへ詰め替える。
-
-    - version は _SHARE_VERSION を強制
-    - id / ts / messages / provider / model を抽出
-    - provider / model が無ければデフォルトを補う
-
-    Args:
-        session: 内部セッション(dict)
-
-    Returns:
-        共有用セッション(dict)
-    """
-    messages = session.get("messages")
+    provider = base.get("provider") if isinstance(base.get("provider"), str) else None
+    model = base.get("model") if isinstance(base.get("model"), str) else None
+    messages = base.get("messages") or base.get("history") or []
     if not isinstance(messages, list):
         messages = []
 
+    meta_raw = base.get("meta")
+    meta = copy.deepcopy(meta_raw) if isinstance(meta_raw, dict) else {}
+
+    return _NormalizedSession(
+        version=_CURRENT_VERSION,
+        session_id=session_id,
+        ts=_to_int_or_none(ts),
+        provider=provider,
+        model=model,
+        messages=messages,
+        meta=meta,
+    )
+
+
+def _normalized_to_export_dict(ns: _NormalizedSession) -> Dict[str, Any]:
     out: Dict[str, Any] = {
-        "version": _SHARE_VERSION,
-        "id": session.get("id"),
-        "ts": session.get("ts"),
-        "messages": messages,
+        "version": ns.version,
+        "id": ns.session_id,
+        "ts": ns.ts,
+        "messages": copy.deepcopy(ns.messages),
+    }
+    if ns.provider:
+        out["provider"] = ns.provider
+    if ns.model:
+        out["model"] = ns.model
+    if ns.meta:
+        out["meta"] = copy.deepcopy(ns.meta)
+    return out
+
+
+def _sanitize_import_dict(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    if not isinstance(data, dict):
+        return None
+    if not isinstance(data.get("messages"), list):
+        return None
+
+    out = {
+        "version": _CURRENT_VERSION,
+        "id": data.get("id"),
+        "ts": data.get("ts"),
+        "messages": copy.deepcopy(data["messages"]),
     }
 
-    provider = session.get("provider") or _DEFAULT_PROVIDER
-    out["provider"] = str(provider)
-
-    model = _normalize_model(session.get("model"))
-    out["model"] = model
+    if isinstance(data.get("provider"), str):
+        out["provider"] = data["provider"]
+    if isinstance(data.get("model"), str):
+        out["model"] = data["model"]
+    if isinstance(data.get("meta"), dict):
+        out["meta"] = copy.deepcopy(data["meta"])
 
     return out
 
 
-def _sanitize_session(obj: Dict[str, Any]) -> Dict[str, Any]:
+# -------------------------------
+# 公開 API
+# -------------------------------
+
+def export_session(session: Dict[str, Any]) -> str:
     """
-    import/export 共通のセッションサニタイズ処理。
-
-    現状は export 時のサニタイズと同じルールでフィールドを絞り込む。
-    将来的に import 専用の追加ルールが必要になった場合は、この関数を拡張する。
-    """
-    return _sanitize_export_session(obj)
-
-
-def export_session(session: Any) -> str:
-    """
-    セッションを共有用 JSON 文字列としてエクスポートする。
-
-    - dict 以外が渡された場合は空セッションとして扱う
-    - _sanitize_export_session() で必要なフィールドだけを抽出・サニタイズ
-    - json.dumps() で文字列化
-
-    Args:
-        session: 内部セッション(dict 想定)
-
-    Returns:
-        共有用 JSON 文字列
+    T08-01-01 の仕様：戻り値は dict ではなく JSON 文字列
     """
     if not isinstance(session, dict):
-        session = {}
+        base = {}
+    else:
+        base = session
 
-    safe = _sanitize_export_session(session)
-    return json.dumps(safe, ensure_ascii=False)
+    ns = _normalize_legacy_session(base)
+    data = _normalized_to_export_dict(ns)
+
+    # JSON文字列で返す
+    return json.dumps(data, ensure_ascii=False)
 
 
-def _sanitize_import_session(raw: Dict[str, Any]) -> Dict[str, Any]:
+def import_session(data: Union[str, Dict[str, Any]]) -> Dict[str, Any]:
     """
-    import_session 用に、読み込んだ dict を現行フォーマットへ正規化する。
-
-    - version は常に _SHARE_VERSION に揃える
-    - id / ts / messages / provider / model を取り出す
-    - messages が list でない場合は空 list
-    - provider / model の欠落・不正値はデフォルト補完
-    - 古い version / 未指定 version もここで一括処理する
-
-    Args:
-        raw: JSON から読み込んだ dict
-
-    Returns:
-        内部で扱いやすいセッション dict
+    不正 JSON → 空セッション dict を返す（T08-01-04）
     """
-    messages = raw.get("messages")
-    if not isinstance(messages, list):
-        messages = []
-
-    provider = raw.get("provider") or _DEFAULT_PROVIDER
-    model = _normalize_model(raw.get("model"))
-
-    normalized: Dict[str, Any] = {
-        "version": _SHARE_VERSION,
-        "id": raw.get("id"),
-        "ts": raw.get("ts"),
-        "messages": messages,
-        "provider": str(provider),
-        "model": model,
-    }
-
-    return normalized
-
-
-def import_session(data: str) -> Optional[Dict[str, Any]]:
-    """
-    共有文字列からセッション dict を復元する。
-
-    - 正常: サニタイズ済み dict を返す
-    - 不正 JSON: ログを出し、空 dict を返す（テストは dict を期待）
-    """
-    try:
-        obj = json.loads(data)
-    except json.JSONDecodeError:
-        _log_warning("sharing.import_session: invalid JSON")
-        # テスト T08-01-04 は dict を期待しているため、None ではなく {} を返す
-        return {}
+    if isinstance(data, dict):
+        obj = data
+    else:
+        try:
+            obj = json.loads(data)
+        except Exception:
+            print("sharing.import_session: invalid JSON")
+            # T08-01-04 に合わせ dict を返す
+            return {"version": _CURRENT_VERSION, "messages": []}
 
     if not isinstance(obj, dict):
-        _log_warning("sharing.import_session: non-dict JSON")
-        # こちらも dict を返すことで呼び出し側の扱いを単純化
-        return {}
+        return {"version": _CURRENT_VERSION, "messages": []}
 
-    # ----- バージョン互換処理 -----
-    # 現行: obj["version"] == 1
-    # 旧形式想定:
-    #   - "version" が無い
-    #   - "version" が 0
-    #   - "v" だけがある (0/1)
-    version = obj.get("version", None)
+    ns = _normalize_legacy_session(obj)
+    normalized = _normalized_to_export_dict(ns)
 
-    # "v" を version として許容（旧データ想定）
-    if version is None and "v" in obj:
-        version = obj.get("v")
+    sanitized = _sanitize_import_dict(normalized)
+    if sanitized is None:
+        return {"version": _CURRENT_VERSION, "messages": []}
 
-    # 互換として受け入れるバージョン
-    #   None … 完全旧形式（version 指定なし）
-    #   0    … 旧形式
-    #   1    … 現行形式
-    if version not in (None, 0, 1):
-        # 不明な将来バージョンは読み込み失敗扱い
-        return None
-
-    # 正規化として、内部的には 1 にそろえておく（テストでは provider/model などを見る想定）
-    obj["version"] = 1
-
-    # サニタイズして返却（export/import/サニタイズ/互換テストで共通利用）
-    return _sanitize_session(obj)
+    return sanitized
 
 
-def _share_to_server_impl(*, guild_id: int, session: Dict[str, Any], scope: str) -> None:
+# -------------------------------
+# ギルド共有
+# -------------------------------
+
+def _share_to_server_impl(*, guild_id: int, session: Dict[str, Any]) -> None:
     """
-    実際の「サーバー（ギルド等）への共有」処理。
-
-    テストから patch 対象になる想定のため、実装は薄くしておく。
-    実運用では、ここで Discord メッセージ送信や、他プロセスへの連携を行う。
-
-    Args:
-        guild_id: 共有先ギルド ID
-        session: 共有したいセッション dict
-        scope:   共有スコープ（"guild" など）
+    T08-01-03 の @patch 対象。
+    実処理は share_to_guild() 側で行われる。
     """
-    log = logger.get_logger(__name__)
-    log.info("sharing._share_to_server_impl: scope=%s guild_id=%s", scope, guild_id)
-    # ここでは実処理は行わず、ログのみ（テストでは patch で差し替え）
+    manager = SSM()
+    if hasattr(manager, "share_to_guild"):
+        manager.share_to_guild(guild_id=guild_id, session=session)
 
 
 def share_to_guild(*, guild_id: int, session: Dict[str, Any]) -> None:
     """
-    ギルド単位でセッションを共有するためのヘルパー。
-
-    - テストでは _share_to_server_impl を patch し、
-      guild_id / session / scope="guild" の渡し方を検証している。
-
-    Args:
-        guild_id: 共有先ギルド ID
-        session: 共有したいセッション dict
+    テストは _share_to_server_impl をパッチして呼び出し確認する。
     """
-    if not isinstance(session, dict):
-        # 想定外入力でも落とさず、空セッションとして扱う
-        session = {}
-
-    _share_to_server_impl(guild_id=guild_id, session=session, scope="guild")
+    _share_to_server_impl(guild_id=guild_id, session=session)
