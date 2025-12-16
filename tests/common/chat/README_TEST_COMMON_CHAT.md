@@ -28,7 +28,9 @@
 | **T07-05** | 継続チャット詳細ガード | 末尾テキスト抽出とステップ用メッセージ構築のガード（想定外型・空リスト・split_text 空文字列結果） | `common/chat/continuation.py` |
 | **T07-06** | 継続チャット top-level ガード | `tail_text` 空時と `_split_into_chunks` が `None` を返す場合の早期リターン／`chat_fn` 未呼び出しを確認 | `common/chat/continuation.py` |
 | **T08-01** | Sharing Session | セッション共有（export/import/guild共有/互換）・冪等性・サニタイズ | `common/chat/sharing.py` |
-| **T08-02** | Sharing Migration | 旧フォーマットから現行セッション形式への移行（version/フィールド補完・安全なフォールバック） | `common/chat/sharing.py` |
+| **T08-02** | Sharing Session (Migration) | 旧形式（dict直入力/v0 JSON/余剰フィールド/version型不整合）の移行と互換を検証 | `common/chat/sharing.py` |
+| **T08-03** | Sharing Session (Guards) | import/export/share の入力ガード（空/非dict JSON/bytes/不正型）で例外を出さないことを検証 | `common/chat/sharing.py` |
+| **T08-04** | Sharing Session (Branch Coverage) | export/import/migration/share の分岐カバレッジ向上（空dict export / export非dict / version未知値fallback / messages非list破棄 / legacy messages欠落のno-op / share内部未実装(no-op)）を検証 | `common/chat/sharing.py` |
 
 ---
 
@@ -420,18 +422,51 @@ python -m tests.common.chat.T08_Sharing_01_sharing_test
 ```
 
 ---
-### T08-02 : Sharing Migration
+### T08-02 : Sharing Session (Migration)
 
 | 番号 | 目的 | 検証内容 | モジュール |
 |---|---|---|---|
-| **T08-02-01** | 旧形式 dict 入力のマイグレーション | `version` 無し + `history` キーを持つ dict を `import_session` が受け取り、`messages` への変換・最小限のフィールド補完を行う | `common/chat/sharing.py` |
-| **T08-02-02** | 旧形式 JSON(v0) のマイグレーション | `{"version":0,"provider":...,"model":...,"history":[...]}` のような JSON 文字列から、`version>=1` かつ `messages` 付きのセッション dict を構築できることを確認 | `common/chat/sharing.py` |
-| **T08-02-03** | 余剰フィールド付き旧形式のサニタイズ | 旧形式に `unknown`/`token_count` 等の余剰キーが混在していても、migration + sanitize 後のセッション dict からは除外されることを確認 | `common/chat/sharing.py` |
-| **T08-02-04** | version 型不整合のフォールバック | `version` が文字列や負数など不正な場合でも例外とならず、`version>=1` の数値に補正される or version 未指定として扱われることを確認 | `common/chat/sharing.py` |
-| **T08-02-05** | dict 直接入力の互換性 | すでに `messages` を持つ dict（version 無し）を `import_session` に直接渡した場合でも、安全に現行セッション dict に正規化されることを確認 | `common/chat/sharing.py` |
+| **T08-02-01** | 旧形式 dict 入力の移行 | dict を直接 `import_session` に渡しても移行され、`provider/model/messages` が復元される | `common/chat/sharing.py` |
+| **T08-02-02** | v0 JSON の移行 | `version=0` 等の旧JSONでも `messages` を含むセッションとして復元される | `common/chat/sharing.py` |
+| **T08-02-03** | 余剰フィールドのサニタイズ | 旧形式に余計なキーがあっても既知キーのみ採用される | `common/chat/sharing.py` |
+| **T08-02-04** | version 型不整合フォールバック | `version` が str 等でも落ちずに復元される | `common/chat/sharing.py` |
+| **T08-02-05** | dict 互換（messages あり） | `messages` を含む dict を渡した場合に互換的に処理される | `common/chat/sharing.py` |
 
 ```bash
 python -m tests.common.chat.T08_Sharing_02_migration_test
+```
+
+---
+### T08-03 : Sharing Session (Guards)
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T08-03-01** | import 空文字ガード | `import_session("")` が例外を出さず、安全に失敗する（`{}` または `None` を返す） | `common/chat/sharing.py` |
+| **T08-03-02** | import JSON(list) ガード | JSON だが `dict` ではない入力（list）で例外を出さず、安全に失敗する | `common/chat/sharing.py` |
+| **T08-03-03** | import JSON(number) ガード | JSON だが `dict` ではない入力（number）で例外を出さず、安全に失敗する | `common/chat/sharing.py` |
+| **T08-03-04** | import bytes ガード | `bytes` 入力でも例外を出さず安全に失敗する（対応実装があれば復元される） | `common/chat/sharing.py` |
+| **T08-03-05** | export 不正型ガード | `export_session(None)` 等の不正入力でも例外を出さない | `common/chat/sharing.py` |
+| **T08-03-06** | share guild_id 不正型ガード | `guild_id` が不正型でも例外を出さない | `common/chat/sharing.py` |
+| **T08-03-07** | share session 不正型ガード | `session` が不正型でも例外を出さない | `common/chat/sharing.py` |
+
+```bash
+python -m tests.common.chat.T08_Sharing_03_sharing_guards_test
+```
+
+---
+### T08-04 : Sharing Session (Branch / Fallback Coverage)
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T08-04-01** | export 空 session(dict) | `export_session({})` が空 JSON を返し例外を出さない | `common/chat/sharing.py` |
+| **T08-04-02** | export session 非 dict | `export_session([])` / `export_session("x")` のフォールバック経路 | `common/chat/sharing.py` |
+| **T08-04-03** | import version 不明値 | `version` が未定義・未知値の場合の fallback 分岐 | `common/chat/sharing.py` |
+| **T08-04-04** | import messages 非 list | `messages` が list 以外のときに破棄される分岐 | `common/chat/sharing.py` |
+| **T08-04-05** | migrate legacy 空 messages | legacy 形式で messages 欠落時の no-op 分岐 | `common/chat/sharing.py` |
+| **T08-04-06** | share_to_guild no-op | 内部実装が None の場合に安全に return する分岐 | `common/chat/sharing.py` |
+
+```bash
+python -m tests.common.chat.T08_Sharing_04_branch_coverage_test
 ```
 
 ---
