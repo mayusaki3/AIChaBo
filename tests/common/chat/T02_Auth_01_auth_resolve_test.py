@@ -129,12 +129,12 @@ if __name__ == "__main__":
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(AuthResolveTest)
     # 正式番号: M02（common/chat） > T02-01（Auth）
     mapping = {
-        "test_01_resolve_without_any_auth": ("M02:T02-01-01", "resolve without any auth"),
-        "test_02_usm_config_no_keys":      ("M02:T02-01-02", "USM provider/model but no keys -> {}"),
-        "test_03_resolve_with_user_key":   ("M02:T02-01-03", "user key preferred"),
-        "test_04_resolve_with_server_key_fallback": ("M02:T02-01-04", "fallback to server key"),
-        "test_05_provider_normalize_to_secretstore_key": ("M02:T02-01-05", "provider normalize -> secretstore key"),
-        "test_06_missing_model":           ("M02:T02-01-06", "missing model -> {}"),
-        "test_07_ssm_used_when_usm_absent":("M02:T02-01-07", "use SSM when USM absent"),
+        "test_01_resolve_without_any_auth": ("COMMON-CHAT:T02-01-01", "resolve without any auth"),
+        "test_02_usm_config_no_keys":      ("COMMON-CHAT:T02-01-02", "USM provider/model but no keys -> {}"),
+        "test_03_resolve_with_user_key":   ("COMMON-CHAT:T02-01-03", "user key preferred"),
+        "test_04_resolve_with_server_key_fallback": ("COMMON-CHAT:T02-01-04", "fallback to server key"),
+        "test_05_provider_normalize_to_secretstore_key": ("COMMON-CHAT:T02-01-05", "provider normalize -> secretstore key"),
+        "test_06_missing_model":           ("COMMON-CHAT:T02-01-06", "missing model -> {}"),
+        "test_07_ssm_used_when_usm_absent":("COMMON-CHAT:T02-01-07", "use SSM when USM absent"),
     }
-    run_unittest_suite("M02:T02-01 common/chat/auth", suite, mapping)
+    run_unittest_suite("COMMON-CHAT:T02-01 common/chat/auth", suite, mapping)

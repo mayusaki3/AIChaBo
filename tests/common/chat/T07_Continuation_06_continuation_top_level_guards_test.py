@@ -99,15 +99,15 @@ class ContinuationTopLevelGuardsTest(unittest.TestCase):
 if __name__ == "__main__":
     mapping: Dict[str, tuple[str, str]] = {
         "test_01_continue_chat_tail_text_empty_early_return": (
-            "M02:T07-06-01",
+            "COMMON-CHAT:T07-06-01",
             "tail_text が空の場合は早期 return \"\" し、chat_fn は呼ばれない",
         ),
         "test_02_continue_chat_split_returns_none": (
-            "M02:T07-06-02",
+            "COMMON-CHAT:T07-06-02",
             "_split_into_chunks が None を返す場合に chat_fn を呼ばず \"\" を返す",
         ),
         "test_03_non_string_reply_str_success": (
-            "M02:T07-06-03",
+            "COMMON-CHAT:T07-06-03",
             "非文字列応答の __str__ 正常経路で responses に追加される",
         ),
     }
@@ -116,7 +116,7 @@ if __name__ == "__main__":
         ContinuationTopLevelGuardsTest
     )
     run_unittest_suite(
-        "M02:T07-06 common/chat/continuation",
+        "COMMON-CHAT:T07-06 common/chat/continuation",
         suite,
         mapping,
     )

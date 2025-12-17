@@ -118,25 +118,25 @@ class ContinuationGuardsTest(unittest.TestCase):
 if __name__ == "__main__":
     mapping = {
         "test_01_resolve_policy_none_and_invalid": (
-            "M02:T07-03-01",
+            "COMMON-CHAT:T07-03-01",
             "policy None / 非dict を空 dict に正規化（_resolve_policy）",
         ),
         "test_02_extract_tail_text_non_list": (
-            "M02:T07-03-02",
+            "COMMON-CHAT:T07-03-02",
             "messages が list 以外の場合は末尾テキスト抽出結果が空文字（_extract_tail_text）",
         ),
         "test_03_split_into_chunks_various_result_types": (
-            "M02:T07-03-03",
+            "COMMON-CHAT:T07-03-03",
             "split_text の戻り値が dict / list / その他の各分岐カバー（_split_into_chunks）",
         ),
         "test_04_prepare_step_messages_guards": (
-            "M02:T07-03-04",
+            "COMMON-CHAT:T07-03-04",
             "base_messages が list 以外 / 空 list / 非dict末尾の各ガード分岐（_prepare_step_messages）",
         ),
         "test_05_continue_chat_max_steps_cast_and_str_error": (
-            "M02:T07-03-05",
+            "COMMON-CHAT:T07-03-05",
             "max_steps キャスト失敗と reply の str() 例外ガード（continue_chat 本体）",
         ),
     }
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ContinuationGuardsTest)
-    run_unittest_suite("M02:T07-03 common/chat/continuation", suite, mapping)
+    run_unittest_suite("COMMON-CHAT:T07-03 common/chat/continuation", suite, mapping)

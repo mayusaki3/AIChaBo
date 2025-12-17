@@ -40,15 +40,21 @@ htmlcov/index.html
 ## テスト番号と検証内容（Index）
 
 > すべてのテストは共通レポータにより  
-> `✅/❌[Mnn:Txx-yy-zz] <タイトル>`  
-> `--- SUMMARY Mnn:Txx-yy: ✅=N / ❌=M / TOTAL=K ---`  
+> `✅/❌[DOMAIN-MODULE:Txx-yy-zz] <タイトル>`  
+> `--- SUMMARY DOMAIN-MODULE:Txx-yy: ✅=N / ❌=M / TOTAL=K ---`  
 > を出力します。  
 > unittest は **メソッド名の昇順**（`test_01_*` → `test_02_*` …）で実行します。
 
+例：
+```
+✅[COMMON-CHAT:T01-01-01] ...
+--- SUMMARY COMMON-CHAT:T01-01 common/chat/provider: ✅=4 / ❌=0 / TOTAL=4 ---
+```
+
 ### 単体テスト
-- [M01: common/secretモジュール単体テスト](common/secret/README_TEST_COMMON_SECRET.md)
-- [M02: common/chatモジュール単体テスト](common/chat/README_TEST_COMMON_CHAT.md)
-- [M03: common/sessionモジュール単体テスト](common/session/README_TEST_COMMON_SESSION.md)
+- [common/secretモジュール単体テスト](common/secret/README_TEST_COMMON_SECRET.md)
+- [common/chatモジュール単体テスト](common/chat/README_TEST_COMMON_CHAT.md)
+- [common/sessionモジュール単体テスト](common/session/README_TEST_COMMON_SESSION.md)
 
 ### 結合テスト
 

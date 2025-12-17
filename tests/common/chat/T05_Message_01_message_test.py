@@ -187,22 +187,22 @@ class MessageUtilTest(unittest.TestCase):
 
 if __name__ == "__main__":
     mapping = {
-        "test_01_normalize_str": ("M02:T05-01-01", '文字列の正規化 -> [{"role":"user","content":"..."}]'),
-        "test_02_passthrough_list": ("M02:T05-01-02", "既存配列の透過"),
-        "test_03_invalid_type_guard": ("M02:T05-01-03", "不正型ガード"),
-        "test_04_empty_string": ("M02:T05-01-04", "空文字の扱い"),
-        "test_05_role_default": ("M02:T05-01-05", "role 既定補完"),
-        "test_06_trim": ("M02:T05-01-06", "トリム規則"),
-        "test_07_join": ("M02:T05-01-07", "結合ユーティリティ"),
-        "test_08_skip_broken": ("M02:T05-01-08", "破損要素スキップ"),
-        "test_09_normalize_dict_ok": ("M02:T05-01-09", "dict入力（role+content 正常）"),
-        "test_10_normalize_dict_missing_content": ("M02:T05-01-10","dict入力（content欠落時はメッセージ化しない）"),
-        "test_11_normalize_list_all_invalid": ("M02:T05-01-11","リストがすべて不正要素の場合は空リスト"),
-        "test_12_ensure_role_skips_non_dict": ("M02:T05-01-12","role補完ユーティリティ: 非dict要素をスキップ"),
-        "test_13_join_messages_skips_invalid": ("M02:T05-01-13","結合ユーティリティ: 不正要素・空文字をスキップして結合"),
-        "test_14_join_messages_empty_input": ("M02:T05-01-14","結合ユーティリティ: None/空入力は空文字を返す"),
-        "test_15_join_messages_string_passthrough": ("M02:T05-01-15","結合ユーティリティ: 文字列入力はそのまま返す"),
-        "test_16_join_messages_non_iterable_guard": ("M02:T05-01-16","結合ユーティリティ: 非イテラブル入力のガード"),
+        "test_01_normalize_str": ("COMMON-CHAT:T05-01-01", '文字列の正規化 -> [{"role":"user","content":"..."}]'),
+        "test_02_passthrough_list": ("COMMON-CHAT:T05-01-02", "既存配列の透過"),
+        "test_03_invalid_type_guard": ("COMMON-CHAT:T05-01-03", "不正型ガード"),
+        "test_04_empty_string": ("COMMON-CHAT:T05-01-04", "空文字の扱い"),
+        "test_05_role_default": ("COMMON-CHAT:T05-01-05", "role 既定補完"),
+        "test_06_trim": ("COMMON-CHAT:T05-01-06", "トリム規則"),
+        "test_07_join": ("COMMON-CHAT:T05-01-07", "結合ユーティリティ"),
+        "test_08_skip_broken": ("COMMON-CHAT:T05-01-08", "破損要素スキップ"),
+        "test_09_normalize_dict_ok": ("COMMON-CHAT:T05-01-09", "dict入力（role+content 正常）"),
+        "test_10_normalize_dict_missing_content": ("COMMON-CHAT:T05-01-10","dict入力（content欠落時はメッセージ化しない）"),
+        "test_11_normalize_list_all_invalid": ("COMMON-CHAT:T05-01-11","リストがすべて不正要素の場合は空リスト"),
+        "test_12_ensure_role_skips_non_dict": ("COMMON-CHAT:T05-01-12","role補完ユーティリティ: 非dict要素をスキップ"),
+        "test_13_join_messages_skips_invalid": ("COMMON-CHAT:T05-01-13","結合ユーティリティ: 不正要素・空文字をスキップして結合"),
+        "test_14_join_messages_empty_input": ("COMMON-CHAT:T05-01-14","結合ユーティリティ: None/空入力は空文字を返す"),
+        "test_15_join_messages_string_passthrough": ("COMMON-CHAT:T05-01-15","結合ユーティリティ: 文字列入力はそのまま返す"),
+        "test_16_join_messages_non_iterable_guard": ("COMMON-CHAT:T05-01-16","結合ユーティリティ: 非イテラブル入力のガード"),
     }
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(MessageUtilTest)
-    run_unittest_suite("M02:T05-01 common/chat/message", suite, mapping)
+    run_unittest_suite("COMMON-CHAT:T05-01 common/chat/message", suite, mapping)

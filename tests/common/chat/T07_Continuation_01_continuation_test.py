@@ -117,14 +117,14 @@ class ContinuationFlowTest(unittest.TestCase):
 
 if __name__ == "__main__":
     mapping = {
-        "test_01_empty_context": ("M02:T07-01-01", "空コンテキスト"),
-        "test_02_normal": ("M02:T07-01-02", "正常継続"),
-        "test_03_provider_raises": ("M02:T07-01-03", "例外握り潰し"),
-        "test_04_long_text_split": ("M02:T07-01-04", "長文継続（分割）"),
-        "test_05_policy_direct_fn": ("M02:T07-01-05", "policy 直呼び"),
-        "test_06_message_normalize_called": ("M02:T07-01-06", "メッセージ正規化呼び出し"),
-        "test_07_max_steps": ("M02:T07-01-07", "ステップ上限"),
-        "test_08_none_reply": ("M02:T07-01-08", "None 応答"),
+        "test_01_empty_context": ("COMMON-CHAT:T07-01-01", "空コンテキスト"),
+        "test_02_normal": ("COMMON-CHAT:T07-01-02", "正常継続"),
+        "test_03_provider_raises": ("COMMON-CHAT:T07-01-03", "例外握り潰し"),
+        "test_04_long_text_split": ("COMMON-CHAT:T07-01-04", "長文継続（分割）"),
+        "test_05_policy_direct_fn": ("COMMON-CHAT:T07-01-05", "policy 直呼び"),
+        "test_06_message_normalize_called": ("COMMON-CHAT:T07-01-06", "メッセージ正規化呼び出し"),
+        "test_07_max_steps": ("COMMON-CHAT:T07-01-07", "ステップ上限"),
+        "test_08_none_reply": ("COMMON-CHAT:T07-01-08", "None 応答"),
     }
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ContinuationFlowTest)
-    run_unittest_suite("M02:T07-01 common\chat\continuation", suite, mapping)
+    run_unittest_suite("COMMON-CHAT:T07-01 common\chat\continuation", suite, mapping)

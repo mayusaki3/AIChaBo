@@ -88,9 +88,9 @@ class ChatLoopBasicTest(unittest.TestCase):
 if __name__ == "__main__":
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ChatLoopBasicTest)
     mapping = {
-        "test_01_empty_input_returns_fixed_message": ("M02:T04-01-01", "empty -> fixed message"),
-        "test_02_missing_model_message":             ("M02:T04-01-02", "missing model -> guidance"),
-        "test_03_happy_path_with_patched_env":       ("M02:T04-01-03", "happy path (patched)"),
-        "test_04_invalid_provider_message":          ("M02:T04-01-04", "invalid provider -> message"),
+        "test_01_empty_input_returns_fixed_message": ("COMMON-CHAT:T04-01-01", "empty -> fixed message"),
+        "test_02_missing_model_message":             ("COMMON-CHAT:T04-01-02", "missing model -> guidance"),
+        "test_03_happy_path_with_patched_env":       ("COMMON-CHAT:T04-01-03", "happy path (patched)"),
+        "test_04_invalid_provider_message":          ("COMMON-CHAT:T04-01-04", "invalid provider -> message"),
     }
-    run_unittest_suite("M02:T04-01 common/chat/chat_loop", suite, mapping)
+    run_unittest_suite("COMMON-CHAT:T04-01 common/chat/chat_loop", suite, mapping)

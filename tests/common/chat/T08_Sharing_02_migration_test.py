@@ -116,11 +116,11 @@ class SharingMigrationTest(unittest.TestCase):
 
 if __name__ == "__main__":
     mapping = {
-        "test_01_legacy_dict_migration": ("M02:T08-02-01", "旧形式 dict 入力のマイグレーション"),
-        "test_02_legacy_v0_json_migration": ("M02:T08-02-02", "旧形式 JSON(v0) のマイグレーション"),
-        "test_03_legacy_with_extra_fields_sanitized": ("M02:T08-02-03", "余剰フィールド付き旧形式のサニタイズ"),
-        "test_04_invalid_version_type_fallback": ("M02:T08-02-04", "version 型不整合のフォールバック"),
-        "test_05_dict_with_messages_passthrough": ("M02:T08-02-05", "dict 直接入力の互換性"),
+        "test_01_legacy_dict_migration": ("COMMON-CHAT:T08-02-01", "旧形式 dict 入力のマイグレーション"),
+        "test_02_legacy_v0_json_migration": ("COMMON-CHAT:T08-02-02", "旧形式 JSON(v0) のマイグレーション"),
+        "test_03_legacy_with_extra_fields_sanitized": ("COMMON-CHAT:T08-02-03", "余剰フィールド付き旧形式のサニタイズ"),
+        "test_04_invalid_version_type_fallback": ("COMMON-CHAT:T08-02-04", "version 型不整合のフォールバック"),
+        "test_05_dict_with_messages_passthrough": ("COMMON-CHAT:T08-02-05", "dict 直接入力の互換性"),
     }
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(SharingMigrationTest)
-    run_unittest_suite("M02:T08-02 common/chat/sharing migration", suite, mapping)
+    run_unittest_suite("COMMON-CHAT:T08-02 common/chat/sharing migration", suite, mapping)

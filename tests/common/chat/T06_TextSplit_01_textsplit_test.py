@@ -79,14 +79,14 @@ class TextSplitTest(unittest.TestCase):
 
 if __name__ == "__main__":
     mapping = {
-        "test_01_basic": ("M02:T06-01-01", "基本分割"),
-        "test_02_sentences_ja": ("M02:T06-01-02", "文単位分割（和文）"),
-        "test_03_sentences_en": ("M02:T06-01-03", "文単位分割（英文）"),
-        "test_04_newlines": ("M02:T06-01-04", "改行混在"),
-        "test_05_super_long_token": ("M02:T06-01-05", "超長単語"),
-        "test_06_empty": ("M02:T06-01-06", "空文字"),
-        "test_07_invalid_param": ("M02:T06-01-07", "無効パラメータ"),
-        "test_08_tail_boundary": ("M02:T06-01-08", "末尾境界"),
+        "test_01_basic": ("COMMON-CHAT:T06-01-01", "基本分割"),
+        "test_02_sentences_ja": ("COMMON-CHAT:T06-01-02", "文単位分割（和文）"),
+        "test_03_sentences_en": ("COMMON-CHAT:T06-01-03", "文単位分割（英文）"),
+        "test_04_newlines": ("COMMON-CHAT:T06-01-04", "改行混在"),
+        "test_05_super_long_token": ("COMMON-CHAT:T06-01-05", "超長単語"),
+        "test_06_empty": ("COMMON-CHAT:T06-01-06", "空文字"),
+        "test_07_invalid_param": ("COMMON-CHAT:T06-01-07", "無効パラメータ"),
+        "test_08_tail_boundary": ("COMMON-CHAT:T06-01-08", "末尾境界"),
     }
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(TextSplitTest)
-    run_unittest_suite("M02:T06-01 common/chat/textsplit", suite, mapping)
+    run_unittest_suite("COMMON-CHAT:T06-01 common/chat/textsplit", suite, mapping)

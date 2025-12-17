@@ -229,24 +229,24 @@ class ChatLoopHelpersTest(unittest.TestCase):
 if __name__ == "__main__":
     mapping = {
         "test_01_extract_policy_user_overrides_server":
-            ("M02:T04-07-01", "_extract_chat_policy_from_sessions: user overrides server"),
+            ("COMMON-CHAT:T04-07-01", "_extract_chat_policy_from_sessions: user overrides server"),
         "test_02_resolve_api_key_priority_user_then_server_then_none":
-            ("M02:T04-07-02", "_resolve_api_key: user > server > None"),
+            ("COMMON-CHAT:T04-07-02", "_resolve_api_key: user > server > None"),
         "test_03_get_provider_chat_fn_success":
-            ("M02:T04-07-03", "_get_provider_chat_fn: uses ai.{provider}.{provider}_api.call_{provider}_chat"),
+            ("COMMON-CHAT:T04-07-03", "_get_provider_chat_fn: uses ai.{provider}.{provider}_api.call_{provider}_chat"),
         "test_04_get_provider_chat_fn_missing_raises_runtime_error":
-            ("M02:T04-07-04", "_get_provider_chat_fn: missing entry -> RuntimeError"),
+            ("COMMON-CHAT:T04-07-04", "_get_provider_chat_fn: missing entry -> RuntimeError"),
         "test_05_extract_policy_guild_only":
-            ("M02:T04-07-05", "_extract_chat_policy_from_sessions: guildのみ指定 -> SSMのみ"),
+            ("COMMON-CHAT:T04-07-05", "_extract_chat_policy_from_sessions: guildのみ指定 -> SSMのみ"),
         "test_06_extract_policy_none_ids_returns_empty":
-            ("M02:T04-07-06", "_extract_chat_policy_from_sessions: user/guild無し -> {} & USM/SSM未呼び出し"),
+            ("COMMON-CHAT:T04-07-06", "_extract_chat_policy_from_sessions: user/guild無し -> {} & USM/SSM未呼び出し"),
         "test_07_resolve_api_key_guild_only_calls_server_key_only":
-            ("M02:T04-07-07", "_resolve_api_key: user_id=None, guild_idあり -> server_key取得のみ & user_key非呼び出し"),
+            ("COMMON-CHAT:T04-07-07", "_resolve_api_key: user_id=None, guild_idあり -> server_key取得のみ & user_key非呼び出し"),
         "test_08_resolve_api_key_user_only_missing_returns_none_and_no_server":
-            ("M02:T04-07-08", "_resolve_api_key: user_idあり・guild_id=None -> user_keyのみ問い合わせ・None返却・server_key非呼び出し"),
+            ("COMMON-CHAT:T04-07-08", "_resolve_api_key: user_idあり・guild_id=None -> user_keyのみ問い合わせ・None返却・server_key非呼び出し"),
         "test_09_resolve_api_key_guild_only_serverkey_none_returns_none":
-            ("M02:T04-07-09", "_resolve_api_key: guild_idあり・server_key=None -> None返却"),
+            ("COMMON-CHAT:T04-07-09", "_resolve_api_key: guild_idあり・server_key=None -> None返却"),
     }
 
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ChatLoopHelpersTest)
-    run_unittest_suite("M02:T04-07 common/chat/chat_loop", suite, mapping)
+    run_unittest_suite("COMMON-CHAT:T04-07 common/chat/chat_loop", suite, mapping)

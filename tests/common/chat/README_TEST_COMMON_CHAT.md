@@ -1,6 +1,6 @@
-[テストユーティリティ](../../README_TEST.md) > M02: common/chatモジュール単体テスト
+[テストユーティリティ](../../README_TEST.md) > common/chatモジュール単体テスト
 
-# M02: ccommon/chatモジュール単体テスト
+# common/chatモジュール単体テスト
 
 ## テスト番号と検証内容（Index）
 
@@ -470,4 +470,4 @@ python -m tests.common.chat.T08_Sharing_04_branch_coverage_test
 ```
 
 ---
-[テストユーティリティ](../../README_TEST.md) > M02: common/chatモジュール単体テスト
+[テストユーティリティ](../../README_TEST.md) > common/chatモジュール単体テスト

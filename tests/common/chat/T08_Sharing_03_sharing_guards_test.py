@@ -87,13 +87,13 @@ class SharingGuardsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     mapping = {
-        "test_01_import_empty_string": ("M02:T08-03-01", "import: 空文字入力の安全ガード"),
-        "test_02_import_json_list": ("M02:T08-03-02", "import: JSON(list) 入力の安全ガード"),
-        "test_03_import_json_number": ("M02:T08-03-03", "import: JSON(number) 入力の安全ガード"),
-        "test_04_import_bytes": ("M02:T08-03-04", "import: bytes 入力の安全ガード"),
-        "test_05_export_invalid_input": ("M02:T08-03-05", "export: None/不正型入力の安全ガード"),
-        "test_06_share_to_guild_invalid_guild_id": ("M02:T08-03-06", "share_to_guild: guild_id 不正型ガード"),
-        "test_07_share_to_guild_invalid_session": ("M02:T08-03-07", "share_to_guild: session 不正型ガード"),
+        "test_01_import_empty_string": ("COMMON-CHAT:T08-03-01", "import: 空文字入力の安全ガード"),
+        "test_02_import_json_list": ("COMMON-CHAT:T08-03-02", "import: JSON(list) 入力の安全ガード"),
+        "test_03_import_json_number": ("COMMON-CHAT:T08-03-03", "import: JSON(number) 入力の安全ガード"),
+        "test_04_import_bytes": ("COMMON-CHAT:T08-03-04", "import: bytes 入力の安全ガード"),
+        "test_05_export_invalid_input": ("COMMON-CHAT:T08-03-05", "export: None/不正型入力の安全ガード"),
+        "test_06_share_to_guild_invalid_guild_id": ("COMMON-CHAT:T08-03-06", "share_to_guild: guild_id 不正型ガード"),
+        "test_07_share_to_guild_invalid_session": ("COMMON-CHAT:T08-03-07", "share_to_guild: session 不正型ガード"),
     }
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(SharingGuardsTest)
-    run_unittest_suite("M02:T08-03 common/chat/sharing guards", suite, mapping)
+    run_unittest_suite("COMMON-CHAT:T08-03 common/chat/sharing guards", suite, mapping)

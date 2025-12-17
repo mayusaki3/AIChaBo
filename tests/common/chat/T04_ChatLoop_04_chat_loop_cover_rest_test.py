@@ -94,9 +94,9 @@ if __name__ == "__main__":
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ChatLoopCoverRestTest)
     # レポータ表示用マッピング（順序固定: test_01 → test_02 → test_03）
     mapping = {
-        "test_01_provider_trim_and_upper_is_valid":        ("M02:T04-04-01", "provider trim/upper is valid"),
-        "test_02_policy_empty_dict_with_explicit_model":   ("M02:T04-04-02", "policy {} + explicit model"),
-        "test_03_provider_returns_none_is_stringified":    ("M02:T04-04-03", 'provider returns None -> "None" string'),
+        "test_01_provider_trim_and_upper_is_valid":        ("COMMON-CHAT:T04-04-01", "provider trim/upper is valid"),
+        "test_02_policy_empty_dict_with_explicit_model":   ("COMMON-CHAT:T04-04-02", "policy {} + explicit model"),
+        "test_03_provider_returns_none_is_stringified":    ("COMMON-CHAT:T04-04-03", 'provider returns None -> "None" string'),
     }
     from tests._report import run_unittest_suite
-    run_unittest_suite("M02:T04-04 common/chat/chat_loop", suite, mapping)
+    run_unittest_suite("COMMON-CHAT:T04-04 common/chat/chat_loop", suite, mapping)

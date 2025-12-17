@@ -1,6 +1,6 @@
 # tests/common/secret/T01_SecretStore_03_store_init_test.py
 # ------------------------------------------------------------
-# M01:T01-03 : SecretStore init / key-gen / error paths
+# COMMON-SECRET:T01-03 : SecretStore init / key-gen / error paths
 # 目的:
 #  - AC_MASTER_KEY 環境変数の有無での初期化分岐
 #  - master.key 自動生成＋chmod 例外経路
@@ -70,7 +70,7 @@ class SecretStoreInitTest(unittest.TestCase):
         # temp 削除
         shutil.rmtree(self.root, ignore_errors=True)
 
-    # M01:T01-03-01: AC_MASTER_KEY あり → master.key を作らずに初期化
+    # COMMON-SECRET:T01-03-01: AC_MASTER_KEY あり → master.key を作らずに初期化
     def test_01_init_with_env_key(self):
         os.environ["AC_MASTER_KEY"] = Fernet.generate_key().decode()
         ss = mod.SecretStore()
@@ -83,7 +83,7 @@ class SecretStoreInitTest(unittest.TestCase):
         ss.put_user_key(100, "openai", b"envtok")
         self.assertEqual(ss.get_user_key(100, "openai"), b"envtok")
 
-    # M01:T01-03-02: envなし → master.key を生成、chmod 例外経路を踏む
+    # COMMON-SECRET:T01-03-02: envなし → master.key を生成、chmod 例外経路を踏む
     def test_02_init_generates_masterkey_and_handles_chmod_error(self):
         # os.chmod を一時的に壊して except 経路を通す
         real_chmod = os.chmod
@@ -107,7 +107,7 @@ class SecretStoreInitTest(unittest.TestCase):
         st = self.mkey.stat()
         self.assertTrue(stat.S_ISREG(st.st_mode))
 
-    # M01:T01-03-03: _load_json - パス未作成なら {} を返す (公開API越しの間接確認)
+    # COMMON-SECRET:T01-03-03: _load_json - パス未作成なら {} を返す (公開API越しの間接確認)
     def test_03_load_json_when_path_not_exists(self):
         # users.json を消しておき、新規 SecretStore から get_user_keys を呼ぶ
         if self.users.exists():
@@ -120,7 +120,7 @@ class SecretStoreInitTest(unittest.TestCase):
             "_load_json がファイル無しで {} を返していることを間接確認",
         )
 
-    # M01:T01-03-04: 破損 user トークンはスキップされる
+    # COMMON-SECRET:T01-03-04: 破損 user トークンはスキップされる
     def test_04_corrupted_user_tokens_are_skipped(self):
         ss = mod.SecretStore()
 
@@ -142,7 +142,7 @@ class SecretStoreInitTest(unittest.TestCase):
             "全て破損している場合は空 dict",
         )
 
-    # M01:T01-03-05: 破損 server トークンはスキップされ、正常分のみ残る
+    # COMMON-SECRET:T01-03-05: 破損 server トークンはスキップされ、正常分のみ残る
     def test_05_server_keys_skip_only_corrupt_entries(self):
         ss = mod.SecretStore()
 
@@ -160,12 +160,12 @@ class SecretStoreInitTest(unittest.TestCase):
         got = ss.get_server_keys(777)
         self.assertEqual(got, {"openai": b"OK"})
 
-    # M01:T01-03-06: 未知 provider -> None
+    # COMMON-SECRET:T01-03-06: 未知 provider -> None
     def test_06_get_server_key_unknown_provider(self):
         ss = mod.SecretStore()
         self.assertIsNone(ss.get_server_key(555, "nope"))
 
-    # M01:T01-03-07: _save_json - os.replace 失敗時に tmp を削除
+    # COMMON-SECRET:T01-03-07: _save_json - os.replace 失敗時に tmp を削除
     def test_07_save_json_tmp_cleanup_on_replace_error(self):
         ss = mod.SecretStore()
 
@@ -192,21 +192,21 @@ class SecretStoreInitTest(unittest.TestCase):
 # テスト名 -> (番号, 説明)
 mapping = {
     "test_01_init_with_env_key":
-        ("M01:T01-03-01", "env優先: master.key未生成"),
+        ("COMMON-SECRET:T01-03-01", "env優先: master.key未生成"),
     "test_02_init_generates_masterkey_and_handles_chmod_error":
-        ("M01:T01-03-02", "env無し: master.key生成 + chmod例外経路"),
+        ("COMMON-SECRET:T01-03-02", "env無し: master.key生成 + chmod例外経路"),
     "test_03_load_json_when_path_not_exists":
-        ("M01:T01-03-03", "_load_json: pathなし -> {}"),
+        ("COMMON-SECRET:T01-03-03", "_load_json: pathなし -> {}"),
     "test_04_corrupted_user_tokens_are_skipped":
-        ("M01:T01-03-04", "破損トークン(user)はスキップ"),
+        ("COMMON-SECRET:T01-03-04", "破損トークン(user)はスキップ"),
     "test_05_server_keys_skip_only_corrupt_entries":
-        ("M01:T01-03-05", "破損トークン(server)はスキップ"),
+        ("COMMON-SECRET:T01-03-05", "破損トークン(server)はスキップ"),
     "test_06_get_server_key_unknown_provider":
-        ("M01:T01-03-06", "未知provider -> None"),
+        ("COMMON-SECRET:T01-03-06", "未知provider -> None"),
     "test_07_save_json_tmp_cleanup_on_replace_error":
-        ("M01:T01-03-07", "_save_json: 失敗時tmp削除"),
+        ("COMMON-SECRET:T01-03-07", "_save_json: 失敗時tmp削除"),
 }
 
 if __name__ == "__main__":
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(SecretStoreInitTest)
-    run_unittest_suite("M01:T01-03 common/secret/store", suite, mapping)
+    run_unittest_suite("COMMON-SECRET:T01-03 common/secret/store", suite, mapping)

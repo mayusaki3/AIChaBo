@@ -1,6 +1,6 @@
-[テストユーティリティ](../../README_TEST.md) > M01: common/secretモジュール単体テスト
+[テストユーティリティ](../../README_TEST.md) > common/secretモジュール単体テスト
 
-# M01: ccommon/secretモジュール単体テスト
+# common/secretモジュール単体テスト
 
 
 # テストユーティリティ
@@ -377,4 +377,4 @@ python -m tests.T07_Context_01_context_test
 **Discord 非依存**の範囲を先にテストできます（高速／安全／CI 向き）。
 
 ---
-[テストユーティリティ](../../README_TEST.md) > M01: common/secretモジュール単体テスト
+[テストユーティリティ](../../README_TEST.md) > common/secretモジュール単体テスト

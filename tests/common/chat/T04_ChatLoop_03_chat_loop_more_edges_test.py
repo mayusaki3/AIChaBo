@@ -109,10 +109,10 @@ class ChatLoopMoreEdgesTest(unittest.TestCase):
 if __name__ == "__main__":
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ChatLoopMoreEdgesTest)
     mapping = {
-        "test_01_apikey_missing":                    ("M02:T04-03-01", "apikey missing -> guidance"),
-        "test_02_all_messages_become_empty":         ("M02:T04-03-02", "all messages empty -> fixed message"),
-        "test_03_policy_none_returns_error_message": ("M02:T04-03-03", "policy=None -> default error message"),
-        "test_04_provider_returns_empty_string":     ("M02:T04-03-04", "provider returns empty string"),
-        "test_05_provider_fn_is_none":               ("M02:T04-03-05", "provider fn None -> handled"),
+        "test_01_apikey_missing":                    ("COMMON-CHAT:T04-03-01", "apikey missing -> guidance"),
+        "test_02_all_messages_become_empty":         ("COMMON-CHAT:T04-03-02", "all messages empty -> fixed message"),
+        "test_03_policy_none_returns_error_message": ("COMMON-CHAT:T04-03-03", "policy=None -> default error message"),
+        "test_04_provider_returns_empty_string":     ("COMMON-CHAT:T04-03-04", "provider returns empty string"),
+        "test_05_provider_fn_is_none":               ("COMMON-CHAT:T04-03-05", "provider fn None -> handled"),
     }
-    run_unittest_suite("M02:T04-03 common/chat/chat_loop", suite, mapping)
+    run_unittest_suite("COMMON-CHAT:T04-03 common/chat/chat_loop", suite, mapping)

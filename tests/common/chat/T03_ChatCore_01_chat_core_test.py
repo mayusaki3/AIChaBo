@@ -95,11 +95,11 @@ if __name__ == "__main__":
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ChatCoreBasicTest)
     # 正式番号: M02（common/chat） > T03-01（ChatCore）
     mapping = {
-        "test_01_guard_empty_text":            ("M02:T03-01-01", "guard(empty)"),
-        "test_02_require_provider_model":      ("M02:T03-01-02", "require provider/model"),
-        "test_03_basic_roundtrip_with_mock":   ("M02:T03-01-03", "roundtrip with mock (minimal)"),
-        "test_04_guard_non_str_input":         ("M02:T03-01-04", "guard(non-str)"),
-        "test_05_echo_without_chat_fn":        ("M02:T03-01-05", "echo without chat_fn"),
-        "test_06_chat_fn_injection_is_called": ("M02:T03-01-06", "chat_fn injection is called"),
+        "test_01_guard_empty_text":            ("COMMON-CHAT:T03-01-01", "guard(empty)"),
+        "test_02_require_provider_model":      ("COMMON-CHAT:T03-01-02", "require provider/model"),
+        "test_03_basic_roundtrip_with_mock":   ("COMMON-CHAT:T03-01-03", "roundtrip with mock (minimal)"),
+        "test_04_guard_non_str_input":         ("COMMON-CHAT:T03-01-04", "guard(non-str)"),
+        "test_05_echo_without_chat_fn":        ("COMMON-CHAT:T03-01-05", "echo without chat_fn"),
+        "test_06_chat_fn_injection_is_called": ("COMMON-CHAT:T03-01-06", "chat_fn injection is called"),
     }
-    run_unittest_suite("M02:T03-01 common/chat/chat_core", suite, mapping)
+    run_unittest_suite("COMMON-CHAT:T03-01 common/chat/chat_core", suite, mapping)

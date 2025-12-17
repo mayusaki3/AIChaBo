@@ -96,29 +96,29 @@ class ContinuationGuards2Test(unittest.TestCase):
 if __name__ == "__main__":
     mapping = {
         "test_01_extract_tail_text_exception": (
-            "M02:T07-04-01",
+            "COMMON-CHAT:T07-04-01",
             "_extract_tail_text: listサブクラスで__getitem__例外 → except経路",
         ),
         "test_02_split_into_chunks_result_str": (
-            "M02:T07-04-02",
+            "COMMON-CHAT:T07-04-02",
             "_split_into_chunks: split_textがstrを返す場合のフォールバック",
         ),
         "test_03_split_into_chunks_unknown_object": (
-            "M02:T07-04-03",
+            "COMMON-CHAT:T07-04-03",
             "_split_into_chunks: split_textが未知型を返す場合のフォールバック",
         ),
         "test_04_split_into_chunks_empty_text": (
-            "M02:T07-04-04",
+            "COMMON-CHAT:T07-04-04",
             "_split_into_chunks: text='' → 早期return[]",
         ),
         "test_05_continue_chat_str_cast_raises_and_no_responses": (
-            "M02:T07-04-05",
+            "COMMON-CHAT:T07-04-05",
             "continue_chat: max_stepsキャスト失敗 + reply.__str__例外 + responses空ガード",
         ),
        "test_06_split_chunks_dict_chunks_non_sequence": (
-            "M02:T07-04-06",
+            "COMMON-CHAT:T07-04-06",
             "_split_into_chunks: dict 形式だが \"chunks\" が list/tuple 以外の場合は空リスト",
         ),
     }
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ContinuationGuards2Test)
-    run_unittest_suite("M02:T07-04 common/chat/continuation", suite, mapping)
+    run_unittest_suite("COMMON-CHAT:T07-04 common/chat/continuation", suite, mapping)

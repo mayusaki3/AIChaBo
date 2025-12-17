@@ -24,7 +24,7 @@ class TextSplitMoreCasesTest(unittest.TestCase):
         if not self.split:
             self.skipTest("split_text not found")
 
-    # [M02:T06-03-01] 英文 空白保持（複合文）
+    # [COMMON-CHAT:T06-03-01] 英文 空白保持（複合文）
     def test_01_en_space_after_punct(self):
         self._need()
         text = "Hello. World. Test."
@@ -34,21 +34,21 @@ class TextSplitMoreCasesTest(unittest.TestCase):
         self.assertGreaterEqual(len(out), 2)
         self.assertTrue(all(len(x) <= 50 for x in out))
 
-    # [M02:T06-03-02] CJK 文区切り複合
+    # [COMMON-CHAT:T06-03-02] CJK 文区切り複合
     def test_02_cjk_mixed_endings(self):
         self._need()
         text = "一文です。二文です？三文です！四文です…四文です。"
         out = self.split(text, max_chars=50, split_sentences=True)
         self.assertGreaterEqual(len(out), 4)
 
-    # [M02:T06-03-03] Unicode/絵文字でも長さ制御が崩れない
+    # [COMMON-CHAT:T06-03-03] Unicode/絵文字でも長さ制御が崩れない
     def test_03_unicode_emoji(self):
         self._need()
         text = "😀テスト😀です。OK!"
         out = self.split(text, max_chars=5, split_sentences=True)
         self.assertTrue(all(len(x) <= 5 for x in out))
 
-    # [M02:T06-03-04] 改行保持：CRLF混在の厳密性
+    # [COMMON-CHAT:T06-03-04] 改行保持：CRLF混在の厳密性
     def test_04_newline_preserve_strict(self):
         self._need()
         text = "line1\r\nline2\nline3\r\n"
@@ -56,7 +56,7 @@ class TextSplitMoreCasesTest(unittest.TestCase):
         # 長さ制約が干渉しない条件で厳密一致
         self.assertEqual("".join(out), text)
 
-    # [M02:T06-03-05] 文区切り優先かハード分割かの現実装確認
+    # [COMMON-CHAT:T06-03-05] 文区切り優先かハード分割かの現実装確認
     def test_05_sentence_vs_hard_split_priority(self):
         self._need()
         text = "長語長語長語長語。次文です。"
@@ -64,7 +64,7 @@ class TextSplitMoreCasesTest(unittest.TestCase):
         # 実装の優先順位に追従（回帰検知が目的）
         self.assertTrue(len(out) >= 2)
 
-    # [M02:T06-03-06] 決定性（同一入力→同一出力）
+    # [COMMON-CHAT:T06-03-06] 決定性（同一入力→同一出力）
     def test_06_deterministic_output(self):
         self._need()
         text = "Deterministic. Output. Check."
@@ -73,7 +73,7 @@ class TextSplitMoreCasesTest(unittest.TestCase):
         out2 = self.split(text, **p)
         self.assertEqual(out1, out2)
 
-    # [M02:T06-03-07] max_chars キャスト/境界
+    # [COMMON-CHAT:T06-03-07] max_chars キャスト/境界
     def test_07_max_chars_cast_and_errors(self):
         self._need()
         # すべて非intは例外
@@ -86,13 +86,13 @@ class TextSplitMoreCasesTest(unittest.TestCase):
 
 if __name__ == "__main__":
     mapping = {
-        "test_01_en_space_after_punct": ("M02:T06-03-01", "英文 空白保持（複合文）"),
-        "test_02_cjk_mixed_endings":   ("M02:T06-03-02", "CJK 文区切り複合"),
-        "test_03_unicode_emoji":       ("M02:T06-03-03", "Unicode/絵文字 長さ制御"),
-        "test_04_newline_preserve_strict": ("M02:T06-03-04", "改行保持 厳密一致"),
-        "test_05_sentence_vs_hard_split_priority": ("M02:T06-03-05", "文区切り優先 vs ハード分割"),
-        "test_06_deterministic_output": ("M02:T06-03-06", "決定性（同一入力→同一出力）"),
-        "test_07_max_chars_cast_and_errors": ("M02:T06-03-07", "max_chars キャスト/境界"),
+        "test_01_en_space_after_punct": ("COMMON-CHAT:T06-03-01", "英文 空白保持（複合文）"),
+        "test_02_cjk_mixed_endings":   ("COMMON-CHAT:T06-03-02", "CJK 文区切り複合"),
+        "test_03_unicode_emoji":       ("COMMON-CHAT:T06-03-03", "Unicode/絵文字 長さ制御"),
+        "test_04_newline_preserve_strict": ("COMMON-CHAT:T06-03-04", "改行保持 厳密一致"),
+        "test_05_sentence_vs_hard_split_priority": ("COMMON-CHAT:T06-03-05", "文区切り優先 vs ハード分割"),
+        "test_06_deterministic_output": ("COMMON-CHAT:T06-03-06", "決定性（同一入力→同一出力）"),
+        "test_07_max_chars_cast_and_errors": ("COMMON-CHAT:T06-03-07", "max_chars キャスト/境界"),
     }
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(TextSplitMoreCasesTest)
-    run_unittest_suite("M02:T06-03 common/chat/textsplit", suite, mapping)
+    run_unittest_suite("COMMON-CHAT:T06-03 common/chat/textsplit", suite, mapping)

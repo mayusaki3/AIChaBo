@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-=== M02:T06-04 unittest suite ===
+=== COMMON-CHAT:T06-04 unittest suite ===
 目的: _parse_args の互換レイヤ分岐（self バインド/省略引数/デフォルト値/位置引数）
     と、文分割側の append 分岐（JA/EN いずれも）を網羅し、行/分岐カバレッジを 100% に引き上げる。
 """
@@ -10,13 +10,13 @@ from typing import List, Callable
 from common.chat import textsplit as M
 
 def _suite_banner() -> None:
-    print("=== M02:T06-04 common/chat/textsplit unittest suite ===")
+    print("=== COMMON-CHAT:T06-04 common/chat/textsplit unittest suite ===")
 
 def _mark(ok: bool, n: int, title: str) -> None:
     # 既存スイートと同じ書式で必ず出力
-    print(f"{'✅' if ok else '❌'}[M02:T06-04-{n:02d}] {title}")
+    print(f"{'✅' if ok else '❌'}[COMMON-CHAT:T06-04-{n:02d}] {title}")
 
-_SUITE = "M02:T06-04"
+_SUITE = "COMMON-CHAT:T06-04"
 _pass = 0
 _fail = 0
 _total = 0
@@ -47,14 +47,14 @@ class TextSplitArgCompatTest(unittest.TestCase):
         # 既存 T06-01/02/03 と同様の「擬似メソッド直叩き」スタイル
         cls.split = M.split_text
 
-    # [M02:T06-04-01] 引数なし -> TypeError （_parse_args: 先頭ガード）
+    # [COMMON-CHAT:T06-04-01] 引数なし -> TypeError （_parse_args: 先頭ガード）
     def test_01_no_args_raises(self):
         def body():
             with self.assertRaises(TypeError):
                 M.split_text()  # type: ignore[misc]
         _run_and_mark(1, "互換レイヤ: 引数なし → TypeError", body)
 
-    # [M02:T06-04-02] 先頭が非 str & 第2引数も非 str -> TypeError
+    # [COMMON-CHAT:T06-04-02] 先頭が非 str & 第2引数も非 str -> TypeError
     def test_02_non_str_self_and_non_str_second(self):
         def body():
             class Dummy: ...
@@ -62,7 +62,7 @@ class TextSplitArgCompatTest(unittest.TestCase):
                 M.split_text(Dummy(), 123)  # type: ignore[arg-type]
         _run_and_mark(2, "互換レイヤ: 先頭/第2引数とも非str → TypeError", body)
 
-    # [M02:T06-04-03] max_chars 省略 → 既定 2000 が効く
+    # [COMMON-CHAT:T06-04-03] max_chars 省略 → 既定 2000 が効く
     def test_03_default_max_chars_path(self):
         def body():
             text = "a" * 2100
@@ -73,7 +73,7 @@ class TextSplitArgCompatTest(unittest.TestCase):
             self.assertEqual("".join(out), text)
         _run_and_mark(3, "互換レイヤ: max_chars 省略で既定値 2000 が適用", body)
 
-    # [M02:T06-04-04] 第3引数の位置引数で split_sentences=True 指定
+    # [COMMON-CHAT:T06-04-04] 第3引数の位置引数で split_sentences=True 指定
     def test_04_positional_split_sentences_true(self):
         def body():
             text = "Hello. World. Test."
@@ -81,7 +81,7 @@ class TextSplitArgCompatTest(unittest.TestCase):
             self.assertEqual(out, ["Hello.", "World.", "Test."])
         _run_and_mark(4, "互換レイヤ: 第3引数で split_sentences=True（位置引数）", body)
 
-    # [M02:T06-04-05] JA 文末での append 分岐（if s: out.append(s)）
+    # [COMMON-CHAT:T06-04-05] JA 文末での append 分岐（if s: out.append(s)）
     def test_05_japanese_append_branch(self):
         def body():
             text = "今日は晴れ。明日も晴れ！ね？"
@@ -89,7 +89,7 @@ class TextSplitArgCompatTest(unittest.TestCase):
             self.assertEqual(out, ["今日は晴れ。", "明日も晴れ！", "ね？"])
         _run_and_mark(5, "JA 文末 append 分岐の到達", body)
 
-    # [M02:T06-04-06] EN 文末が句点で終わらない flush 分岐
+    # [COMMON-CHAT:T06-04-06] EN 文末が句点で終わらない flush 分岐
     # 例: 最後が "end" で終わるケースを文単位で True にして残バッファ append を踏む
     def test_06_english_tail_flush_without_terminal_punct(self):
         def body():
@@ -101,7 +101,7 @@ class TextSplitArgCompatTest(unittest.TestCase):
             self.assertEqual(len(out), 2)
         _run_and_mark(6, "EN 文末（無句点）flush 分岐の到達", body)
 
-    # [M02:T06-04-07] 空文字 + split_sentences=True の互換経路
+    # [COMMON-CHAT:T06-04-07] 空文字 + split_sentences=True の互換経路
     # 互換レイヤ（_parse_args）経由でも落ちず、実装の既定出力に追従することを検証
     def test_07_empty_with_sentence_mode(self):
         def body():
@@ -110,7 +110,7 @@ class TextSplitArgCompatTest(unittest.TestCase):
             self.assertIn("".join(out), ["", ""])
         _run_and_mark(7, "空文字 + 文分割モード（互換経路）", body)
 
-    # [M02:T06-04-08] EN 文単位: 末尾が空白のみ -> 残バッファ append スキップ分岐
+    # [COMMON-CHAT:T06-04-08] EN 文単位: 末尾が空白のみ -> 残バッファ append スキップ分岐
     def test_08_english_tail_whitespace_only_not_appended(self):
         def body():
             # 文末までに2文を確定させ、最後は空白のみ残るようにする
@@ -120,7 +120,7 @@ class TextSplitArgCompatTest(unittest.TestCase):
             self.assertEqual(out, ["Hello.", "World."])
         _run_and_mark(8, "EN 文末: 末尾が空白のみ → append されない（スキップ枝）", body)
 
-    # [M02:T06-04-09] EN 文単位: 入力が改行のみ -> append スキップ分岐
+    # [COMMON-CHAT:T06-04-09] EN 文単位: 入力が改行のみ -> append スキップ分岐
     def test_09_only_newlines_not_appended(self):
         def body():
             text = "\r\n \n"  # 実質的に内容なし（空白/改行のみ）
@@ -132,7 +132,7 @@ class TextSplitArgCompatTest(unittest.TestCase):
                 self.assertEqual(c.strip(), "")
         _run_and_mark(9, "EN 文末: 改行/空白のみ入力 → append されない（スキップ枝）", body)
 
-    # [M02:T06-04-10] JA 文末: 直前が空白のみ → 空チャンクは append されない（ガード枝の検証）
+    # [COMMON-CHAT:T06-04-10] JA 文末: 直前が空白のみ → 空チャンクは append されない（ガード枝の検証）
     def test_10_japanese_terminator_after_only_whitespace(self):
         def body():
             text1 = "\u3000。"

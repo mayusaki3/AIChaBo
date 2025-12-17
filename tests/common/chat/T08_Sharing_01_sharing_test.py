@@ -155,14 +155,14 @@ class SharingTest(unittest.TestCase):
 
 if __name__ == "__main__":
     mapping = {
-        "test_01_export": ("M02:T08-01-01", "export 基本"),
-        "test_02_import": ("M02:T08-01-02", "import 基本"),
-        "test_03_share_to_guild": ("M02:T08-01-03", "guild 共有"),
-        "test_04_invalid_json": ("M02:T08-01-04", "不正 JSON"),
-        "test_05_idempotent": ("M02:T08-01-05", "冪等"),
-        "test_06_sanitize": ("M02:T08-01-06", "サニタイズ"),
-        "test_07_version_compat": ("M02:T08-01-07", "バージョン互換"),
-        "test_08_partial_share": ("M02:T08-01-08", "部分共有"),
+        "test_01_export": ("COMMON-CHAT:T08-01-01", "export 基本"),
+        "test_02_import": ("COMMON-CHAT:T08-01-02", "import 基本"),
+        "test_03_share_to_guild": ("COMMON-CHAT:T08-01-03", "guild 共有"),
+        "test_04_invalid_json": ("COMMON-CHAT:T08-01-04", "不正 JSON"),
+        "test_05_idempotent": ("COMMON-CHAT:T08-01-05", "冪等"),
+        "test_06_sanitize": ("COMMON-CHAT:T08-01-06", "サニタイズ"),
+        "test_07_version_compat": ("COMMON-CHAT:T08-01-07", "バージョン互換"),
+        "test_08_partial_share": ("COMMON-CHAT:T08-01-08", "部分共有"),
     }
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(SharingTest)
-    run_unittest_suite("M02:T08-01 common/chat/sharing", suite, mapping)
+    run_unittest_suite("COMMON-CHAT:T08-01 common/chat/sharing", suite, mapping)

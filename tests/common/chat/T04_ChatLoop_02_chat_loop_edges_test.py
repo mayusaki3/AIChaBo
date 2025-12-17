@@ -82,8 +82,8 @@ class ChatLoopEdgesTest(unittest.TestCase):
 if __name__ == "__main__":
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ChatLoopEdgesTest)
     mapping = {
-        "test_01_explicit_model_overrides_policy": ("M02:T04-02-01", "explicit model overrides policy"),
-        "test_02_extra_params_passthrough":        ("M02:T04-02-02", "extra params passthrough"),
-        "test_03_provider_fn_raises_is_handled":   ("M02:T04-02-03", "provider fn raises -> handled"),
+        "test_01_explicit_model_overrides_policy": ("COMMON-CHAT:T04-02-01", "explicit model overrides policy"),
+        "test_02_extra_params_passthrough":        ("COMMON-CHAT:T04-02-02", "extra params passthrough"),
+        "test_03_provider_fn_raises_is_handled":   ("COMMON-CHAT:T04-02-03", "provider fn raises -> handled"),
     }
-    run_unittest_suite("M02:T04-02 common/chat/chat_loop", suite, mapping)
+    run_unittest_suite("COMMON-CHAT:T04-02 common/chat/chat_loop", suite, mapping)

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-M01:T01-01 SecretStore 基本動作 & 競合整合性テスト
+COMMON-SECRET:T01-01 SecretStore 基本動作 & 競合整合性テスト
 
 目的:
   - ユーザ/サーバ鍵の put/get が往復で正しく動作する（永続化OK）
@@ -11,7 +11,7 @@ M01:T01-01 SecretStore 基本動作 & 競合整合性テスト
   python -m tests.common.secret.T01_SecretStore_01_store_test
 
 出力:
-  [M01:T01-01-xx] ... 形式の行 + 共通SUMMARY（tests._report.run_unittest_suite）
+  [COMMON-SECRET:T01-01-xx] ... 形式の行 + 共通SUMMARY（tests._report.run_unittest_suite）
 """
 
 import os
@@ -156,10 +156,10 @@ class SecretStoreBasicTest(unittest.TestCase):
 
 if __name__ == "__main__":
     mapping = {
-        "test_01_user_roundtrip": ("M01:T01-01-01", "user鍵: put/get roundtrip"),
-        "test_02_server_roundtrip_and_delete": ("M01:T01-01-02", "server鍵: roundtrip + has + delete"),
-        "test_03_user_concurrent_lww": ("M01:T01-01-03", "user鍵: 並列 put -> LWW"),
-        "test_04_server_concurrent_lww": ("M01:T01-01-04", "server鍵: 並列 put -> LWW"),
+        "test_01_user_roundtrip": ("COMMON-SECRET:T01-01-01", "user鍵: put/get roundtrip"),
+        "test_02_server_roundtrip_and_delete": ("COMMON-SECRET:T01-01-02", "server鍵: roundtrip + has + delete"),
+        "test_03_user_concurrent_lww": ("COMMON-SECRET:T01-01-03", "user鍵: 並列 put -> LWW"),
+        "test_04_server_concurrent_lww": ("COMMON-SECRET:T01-01-04", "server鍵: 並列 put -> LWW"),
     }
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(SecretStoreBasicTest)
-    run_unittest_suite("M01:T01-01 common/secret/store", suite, mapping)
+    run_unittest_suite("COMMON-SECRET:T01-01 common/secret/store", suite, mapping)

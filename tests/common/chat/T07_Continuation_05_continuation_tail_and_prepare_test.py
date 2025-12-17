@@ -73,23 +73,23 @@ class ContinuationTailAndPrepareGuardsTest(unittest.TestCase):
 if __name__ == "__main__":
     mapping: Dict[str, tuple[str, str]] = {
         "test_01_extract_tail_last_is_str": (
-            "M02:T07-05-01",
+            "COMMON-CHAT:T07-05-01",
             "_extract_tail_text: 末尾が str の場合にその文字列を返す",
         ),
         "test_02_extract_tail_last_is_unknown_type": (
-            "M02:T07-05-02",
+            "COMMON-CHAT:T07-05-02",
             "_extract_tail_text: 末尾が dict/str 以外の場合は空文字を返すガード経路",
         ),
         "test_03_prepare_step_messages_unknown_last_type": (
-            "M02:T07-05-03",
+            "COMMON-CHAT:T07-05-03",
             "_prepare_step_messages: 末尾が想定外型の場合に末尾へ chunk を append",
         ),
         "test_04_prepare_step_messages_base_not_list": (
-            "M02:T07-05-04",
+            "COMMON-CHAT:T07-05-04",
             "_prepare_step_messages: base_messages が list 以外の場合のガード経路",
         ),
         "test_05_prepare_step_messages_base_empty_list": (
-            "M02:T07-05-05",
+            "COMMON-CHAT:T07-05-05",
             "_prepare_step_messages: base_messages が空 list の場合のガード経路",
         ),
     }
@@ -97,4 +97,4 @@ if __name__ == "__main__":
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(
         ContinuationTailAndPrepareGuardsTest
     )
-    run_unittest_suite("M02:T07-05 common/chat/continuation", suite, mapping)
+    run_unittest_suite("COMMON-CHAT:T07-05 common/chat/continuation", suite, mapping)

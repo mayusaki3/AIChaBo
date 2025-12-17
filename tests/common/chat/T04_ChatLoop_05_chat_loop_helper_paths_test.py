@@ -76,7 +76,7 @@ class ChatLoopHelperPathsTest(unittest.TestCase):
 if __name__ == "__main__":
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ChatLoopHelperPathsTest)
     mapping = {
-        "test_01_policy_via_sessions_and_chat_core_called":           ("M02:T04-05-01", "policy via sessions → provider chat called"),
-        "test_02_helper_builds_chat_fn_with_explicit_model_override": ("M02:T04-05-02", "explicit model overrides policy; extra passthrough"),
+        "test_01_policy_via_sessions_and_chat_core_called":           ("COMMON-CHAT:T04-05-01", "policy via sessions → provider chat called"),
+        "test_02_helper_builds_chat_fn_with_explicit_model_override": ("COMMON-CHAT:T04-05-02", "explicit model overrides policy; extra passthrough"),
     }
-    run_unittest_suite("M02:T04-05 common/chat/chat_loop", suite, mapping)
+    run_unittest_suite("COMMON-CHAT:T04-05 common/chat/chat_loop", suite, mapping)

@@ -153,15 +153,15 @@ class ChatLoopPathsCoverTest(unittest.TestCase):
 if __name__ == "__main__":
     mapping = {
         "test_01_explicit_model_overrides_policy_model":
-            ("M02:T04-06-01", "explicit model overrides policy model"),
+            ("COMMON-CHAT:T04-06-01", "explicit model overrides policy model"),
         "test_02_model_filled_from_policy_when_missing":
-            ("M02:T04-06-02", "model from policy when missing"),
+            ("COMMON-CHAT:T04-06-02", "model from policy when missing"),
         "test_03_non_string_reply_is_converted_to_str":
-            ("M02:T04-06-03", "non-str reply -> str()"),
+            ("COMMON-CHAT:T04-06-03", "non-str reply -> str()"),
         "test_04_empty_reply_becomes_fixed_message":
-            ("M02:T04-06-04", "empty reply -> （応答が空でした）"),
+            ("COMMON-CHAT:T04-06-04", "empty reply -> （応答が空でした）"),
         "test_05_provider_raises_returns_error_message":
-            ("M02:T04-06-05", "provider raises -> error message"),
+            ("COMMON-CHAT:T04-06-05", "provider raises -> error message"),
     }
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ChatLoopPathsCoverTest)
-    run_unittest_suite("M02:T04-06 common/chat/chat_loop", suite, mapping)
+    run_unittest_suite("COMMON-CHAT:T04-06 common/chat/chat_loop", suite, mapping)

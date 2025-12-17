@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-M01:T01-04 SecretStore その他分岐
+COMMON-SECRET:T01-04 SecretStore その他分岐
 
 目的:
   - get_user_keys / get_server_keys の部分成功パス
@@ -55,11 +55,11 @@ class _TempRoot:
 
 class SecretStoreMiscTest(unittest.TestCase):
     """
-    M01:T01-04 SecretStore 細かい分岐
+    COMMON-SECRET:T01-04 SecretStore 細かい分岐
     """
 
     def test_01_get_user_keys_partial_success(self):
-        """[M01:T01-04-01] 一部復号失敗しても残りは取得"""
+        """[COMMON-SECRET:T01-04-01] 一部復号失敗しても残りは取得"""
         with _TempRoot() as env:
             ss = store_mod.SecretStore()
             assert env.users is not None
@@ -74,13 +74,13 @@ class SecretStoreMiscTest(unittest.TestCase):
             self.assertNotIn("bad", out)
 
     def test_02_get_server_keys_missing_gid(self):
-        """[M01:T01-04-02] get_server_keys: 無いgid -> {}"""
+        """[COMMON-SECRET:T01-04-02] get_server_keys: 無いgid -> {}"""
         with _TempRoot():
             ss = store_mod.SecretStore()
             self.assertEqual(ss.get_server_keys(9999), {})
 
     def test_03_save_json_success(self):
-        """[M01:T01-04-03] _save_json 正常系"""
+        """[COMMON-SECRET:T01-04-03] _save_json 正常系"""
         with _TempRoot() as env:
             ss = store_mod.SecretStore()
             assert env.users is not None
@@ -89,7 +89,7 @@ class SecretStoreMiscTest(unittest.TestCase):
             self.assertEqual(data, {"x": 1})
 
     def test_04_save_json_type_error_cleanup(self):
-        """[M01:T01-04-04] _save_json dump TypeError -> tmp cleanup"""
+        """[COMMON-SECRET:T01-04-04] _save_json dump TypeError -> tmp cleanup"""
         with _TempRoot() as env:
             ss = store_mod.SecretStore()
             assert env.users is not None
@@ -105,7 +105,7 @@ class SecretStoreMiscTest(unittest.TestCase):
             self.assertEqual(tmp, [])
 
     def test_05_get_user_key_enc_missing_returns_none(self):
-        """[M01:T01-04-05] get_user_key: enc不在 -> None"""
+        """[COMMON-SECRET:T01-04-05] get_user_key: enc不在 -> None"""
         with _TempRoot() as env:
             ss = store_mod.SecretStore()
             # users.json に provider はあるが enc が無い状態を作る
@@ -114,7 +114,7 @@ class SecretStoreMiscTest(unittest.TestCase):
             self.assertIsNone(got)
 
     def test_06_delete_user_keys_true_branch(self):
-        """[M01:T01-04-06] delete_user_keys: True 分岐"""
+        """[COMMON-SECRET:T01-04-06] delete_user_keys: True 分岐"""
         with _TempRoot() as env:
             ss = store_mod.SecretStore()
             ss.put_user_key(1, "openai", b"X")
@@ -124,7 +124,7 @@ class SecretStoreMiscTest(unittest.TestCase):
             self.assertEqual(ss.get_user_keys(1), {})
 
     def test_07_load_json_path_not_exists_returns_empty(self):
-        """[M01:T01-04-07] _load_json: パス無し -> {}"""
+        """[COMMON-SECRET:T01-04-07] _load_json: パス無し -> {}"""
         with _TempRoot() as env:
             ss = store_mod.SecretStore()
             # users.json を消しておく
@@ -134,7 +134,7 @@ class SecretStoreMiscTest(unittest.TestCase):
             self.assertEqual(got, {})
 
     def test_08_dec_empty_valueerror_handled_via_get_user_key(self):
-        """[M01:T01-04-08] _dec('') の ValueError を get_user_key 側で握りつぶす経路"""
+        """[COMMON-SECRET:T01-04-08] _dec('') の ValueError を get_user_key 側で握りつぶす経路"""
         with _TempRoot() as env:
             ss = store_mod.SecretStore()
             # 復号対象が空文字になるように直書き
@@ -143,7 +143,7 @@ class SecretStoreMiscTest(unittest.TestCase):
             self.assertIsNone(got)
 
     def test_09_load_json_recovery_save_fails(self):
-        """[M01:T01-04-09] _load_json: 壊れJSON + 復旧saveも失敗 -> {} 返却"""
+        """[COMMON-SECRET:T01-04-09] _load_json: 壊れJSON + 復旧saveも失敗 -> {} 返却"""
         with _TempRoot() as env:
             ss = store_mod.SecretStore()
             env.users.write_text("{broken json", encoding="utf-8")
@@ -159,7 +159,7 @@ class SecretStoreMiscTest(unittest.TestCase):
                 os.replace = real_replace
 
     def test_10_save_json_cleanup_remove_raises(self):
-        """[M01:T01-04-10] _save_json: finally cleanup の os.remove が例外でも漏れない"""
+        """[COMMON-SECRET:T01-04-10] _save_json: finally cleanup の os.remove が例外でも漏れない"""
         with _TempRoot() as env:
             ss = store_mod.SecretStore()
             # json.dump を成功させ replace も通すが、最後の remove だけ落とす
@@ -176,14 +176,14 @@ class SecretStoreMiscTest(unittest.TestCase):
             self.assertEqual(leftovers, [])
 
     def test_11_dec_empty_direct_raises_valueerror(self):
-        """[M01:T01-04-11] _dec('') を直接叩く -> ValueError"""
+        """[COMMON-SECRET:T01-04-11] _dec('') を直接叩く -> ValueError"""
         with _TempRoot() as _:
             ss = store_mod.SecretStore()
             with self.assertRaises(ValueError):
                 ss._dec("")
 
     def test_12_delete_user_keys_both_branches(self):
-        """[M01:T01-04-12] delete_user_keys: False -> True の両枝"""
+        """[COMMON-SECRET:T01-04-12] delete_user_keys: False -> True の両枝"""
         with _TempRoot() as env:
             ss = store_mod.SecretStore()
             # まず存在しない -> False
@@ -193,7 +193,7 @@ class SecretStoreMiscTest(unittest.TestCase):
             self.assertTrue(ss.delete_user_keys(999))
 
     def test_13_load_json_recovery_success(self):
-        """[M01:T01-04-13] _load_json: 壊れJSON→復旧成功パス（失敗パスは-09で網羅済み）"""
+        """[COMMON-SECRET:T01-04-13] _load_json: 壊れJSON→復旧成功パス（失敗パスは-09で網羅済み）"""
         with _TempRoot() as env:
             ss = store_mod.SecretStore()
             # 壊れたJSONを書き込む→_load_jsonが復旧を書き戻す成功経路を踏む
@@ -205,7 +205,7 @@ class SecretStoreMiscTest(unittest.TestCase):
             self.assertEqual(got2, {})
 
     def test_14_put_server_key_overwrite_existing(self):
-        """[M01:T01-04-14] put_server_key: 既存ノード上書きパス（初回→上書き）"""
+        """[COMMON-SECRET:T01-04-14] put_server_key: 既存ノード上書きパス（初回→上書き）"""
         with _TempRoot() as env:
             ss = store_mod.SecretStore()
             ss.put_server_key(42, "openai", b"OLD")
@@ -214,7 +214,7 @@ class SecretStoreMiscTest(unittest.TestCase):
             self.assertEqual(got, b"NEW")
 
     def test_15_delete_server_keys_node_exists_but_empty(self):
-        """[M01:T01-04-15] delete_server_keys: ノードはあるが providers={} → False 分岐"""
+        """[COMMON-SECRET:T01-04-15] delete_server_keys: ノードはあるが providers={} → False 分岐"""
         with _TempRoot() as env:
             ss = store_mod.SecretStore()
             # サーバーノードだけ作る（providersは空）
@@ -222,7 +222,7 @@ class SecretStoreMiscTest(unittest.TestCase):
             self.assertFalse(ss.delete_server_keys(100))
 
     def test_16_get_server_key_undecodable_returns_none(self):
-        """[M01:T01-04-16] get_server_key: 復号不可値（prefix付きだが中身壊れ）→ None"""
+        """[COMMON-SECRET:T01-04-16] get_server_key: 復号不可値（prefix付きだが中身壊れ）→ None"""
         with _TempRoot() as env:
             ss = store_mod.SecretStore()
             # 復号に失敗するよう、'fernet:' 形式だが中身を壊す
@@ -232,12 +232,12 @@ class SecretStoreMiscTest(unittest.TestCase):
             self.assertIsNone(ss.get_server_key(5, "openai"))
 
     def test_17_backend_name_direct(self):
-        """[M01:T01-04-17] backend_name を直接呼ぶ（L77）"""
+        """[COMMON-SECRET:T01-04-17] backend_name を直接呼ぶ（L77）"""
         ss = store_mod.SecretStore()
         self.assertEqual(ss.backend_name(), "Fernet (portable)")
 
     def test_18_put_server_key_enters_with_block(self):
-        """[M01:T01-04-18] put_server_key: 前後に複数回呼んで with 入口も網羅（L131,136-137）"""
+        """[COMMON-SECRET:T01-04-18] put_server_key: 前後に複数回呼んで with 入口も網羅（L131,136-137）"""
         with _TempRoot() as env:
             ss = store_mod.SecretStore()
             # 空白と大小混在で strip/lower 分岐も踏む
@@ -248,7 +248,7 @@ class SecretStoreMiscTest(unittest.TestCase):
             self.assertEqual(ss.get_server_key(321, "openai"), b"X2")
 
     def test_19__load_json_head_is_executed(self):
-        """[M01:T01-04-19] _load_json を直接呼び関数先頭の到達を明示（L193-194）"""
+        """[COMMON-SECRET:T01-04-19] _load_json を直接呼び関数先頭の到達を明示（L193-194）"""
         with _TempRoot() as env:
             ss = store_mod.SecretStore()
             # 未作成パスに対して直接呼ぶ
@@ -260,7 +260,7 @@ class SecretStoreMiscTest(unittest.TestCase):
             self.assertEqual(got2, {})
 
     def test_20_delete_server_keys_node_exists_but_missing_providers_key(self):
-        """[M01:T01-04-20] delete_server_keys: ノードは存在するが providers キー自体が無い -> False（L249-250想定）"""
+        """[COMMON-SECRET:T01-04-20] delete_server_keys: ノードは存在するが providers キー自体が無い -> False（L249-250想定）"""
         with _TempRoot() as env:
             ss = store_mod.SecretStore()
             # providers キーを持たない壊れノードを直書き
@@ -268,7 +268,7 @@ class SecretStoreMiscTest(unittest.TestCase):
             self.assertFalse(ss.delete_server_keys(77))
 
     def test_21_module_reload_counts_def_lines(self):
-        """[M01:T01-04-21] importlib.reload で関数定義行のカバレッジを確実に記録（L131,136-137,193-194対策）"""
+        """[COMMON-SECRET:T01-04-21] importlib.reload で関数定義行のカバレッジを確実に記録（L131,136-137,193-194対策）"""
         # 既に import 済みの store_mod をリロードして “def ライン”の実行を明示化
         import importlib  # noqa: F401
         import common.secret.store as store_module
@@ -278,7 +278,7 @@ class SecretStoreMiscTest(unittest.TestCase):
         _ = ss.backend_name()
 
     def test_22_delete_server_keys_weird_node_shapes(self):
-        """[M01:T01-04-22] delete_server_keys: ノード型が不正（providers欠落/None）パスを網羅（L249-250相当）"""
+        """[COMMON-SECRET:T01-04-22] delete_server_keys: ノード型が不正（providers欠落/None）パスを網羅（L249-250相当）"""
         with _TempRoot() as env:
             ss = store_mod.SecretStore()
             # providers キー欠落
@@ -289,7 +289,7 @@ class SecretStoreMiscTest(unittest.TestCase):
             self.assertFalse(ss.delete_server_keys(72))
 
     def test_23_delete_server_keys_exception_branch(self):
-        """[M01:T01-04-23] delete_server_keys: _save_json 例外 -> False を踏む（L193-194相当）"""
+        """[COMMON-SECRET:T01-04-23] delete_server_keys: _save_json 例外 -> False を踏む（L193-194相当）"""
         with _TempRoot() as env:
             ss = store_mod.SecretStore()
             # 正常データ作成し if node を通す
@@ -308,7 +308,7 @@ class SecretStoreMiscTest(unittest.TestCase):
                 ss._save_json = real_save
 
     def test_24_save_json_cleanup_remove_exception(self):
-        """[M01:T01-04-24] _save_json: finally 内 cleanup の os.remove 例外を握り潰す（L249-250）"""
+        """[COMMON-SECRET:T01-04-24] _save_json: finally 内 cleanup の os.remove 例外を握り潰す（L249-250）"""
         import os as _os
         with _TempRoot() as env:
             ss = store_mod.SecretStore()
@@ -335,7 +335,7 @@ class SecretStoreMiscTest(unittest.TestCase):
                 _os.replace, _os.remove, _os.path.exists = real_replace, real_remove, real_exists
 
     def test_25_delete_user_keys_if_line_executed(self):
-        """[M01:T01-04-25] delete_user_keys: if 条件評価行と True 分岐の到達（L131, 136-137）"""
+        """[COMMON-SECRET:T01-04-25] delete_user_keys: if 条件評価行と True 分岐の到達（L131, 136-137）"""
         with _TempRoot() as env:
             ss = store_mod.SecretStore()
             ss.put_user_key(12345, "openai", b"T")
@@ -347,7 +347,7 @@ class SecretStoreMiscTest(unittest.TestCase):
             self.assertEqual(ss.get_user_keys(12345), {})
 
     def test_26_put_server_key_node_is_not_dict_recreates(self):
-        """[M01:T01-04-26] servers.json の gid が dict 以外（list等）→ ノード再初期化して保存"""
+        """[COMMON-SECRET:T01-04-26] servers.json の gid が dict 以外（list等）→ ノード再初期化して保存"""
         with _TempRoot() as env:
             ss = store_mod.SecretStore()
             # gid=200 のノードを list で壊しておく
@@ -357,7 +357,7 @@ class SecretStoreMiscTest(unittest.TestCase):
             self.assertEqual(ss.get_server_key(200, "openai"), b"X")
 
     def test_27_put_server_key_providers_is_not_dict_recreates(self):
-        """[M01:T01-04-27] gid はあるが providers が dict 以外（str等）→ providers 再初期化"""
+        """[COMMON-SECRET:T01-04-27] gid はあるが providers が dict 以外（str等）→ providers 再初期化"""
         with _TempRoot() as env:
             ss = store_mod.SecretStore()
             # gid=201 は dict だが providers が文字列
@@ -390,35 +390,35 @@ class SecretStoreMiscTest(unittest.TestCase):
 
 if __name__ == "__main__":
     mapping = {
-        "test_01_get_user_keys_partial_success": ("M01:T01-04-01", "get_user_keys 部分成功"),
-        "test_02_get_server_keys_missing_gid": ("M01:T01-04-02", "get_server_keys gid無し->{}"),
-        "test_03_save_json_success": ("M01:T01-04-03", "_save_json 正常系"),
-        "test_04_save_json_type_error_cleanup": ("M01:T01-04-04", "_save_json TypeError時cleanup"),
-        "test_05_get_user_key_enc_missing_returns_none": ("M01:T01-04-05", "get_user_key: enc不在->None"),
-        "test_06_delete_user_keys_true_branch": ("M01:T01-04-06", "delete_user_keys True分岐"),
-        "test_07_load_json_path_not_exists_returns_empty": ("M01:T01-04-07", "_load_json パス無し->{}"),
-        "test_08_dec_empty_valueerror_handled_via_get_user_key": ("M01:T01-04-08", "_dec('') ValueErrorをget_user_keyで握り潰す"),
-        "test_09_load_json_recovery_save_fails": ("M01:T01-04-09", "壊れJSON+復旧save失敗->{}"),
-        "test_10_save_json_cleanup_remove_raises": ("M01:T01-04-10", "_save_json cleanup remove例外"),
-        "test_11_dec_empty_direct_raises_valueerror": ("M01:T01-04-11", "_dec('') 直接 -> ValueError"),
-        "test_12_delete_user_keys_both_branches": ("M01:T01-04-12", "delete_user_keys false/true両枝"),
-        "test_13_load_json_recovery_success": ("M01:T01-04-13", "_load_json 復旧成功"),
-        "test_14_put_server_key_overwrite_existing": ("M01:T01-04-14", "put_server_key 上書き"),
-        "test_15_delete_server_keys_node_exists_but_empty": ("M01:T01-04-15", "delete_server_keys 空→False"),
-        "test_16_get_server_key_undecodable_returns_none": ("M01:T01-04-16", "get_server_key 復号不可→None"),
-        "test_17_backend_name_direct": ("M01:T01-04-17", "backend_name 直接"),
-        "test_18_put_server_key_enters_with_block": ("M01:T01-04-18", "put_server_key with入口網羅"),
-        "test_19__load_json_head_is_executed": ("M01:T01-04-19", "_load_json 直叩きで先頭到達"),
-        "test_20_delete_server_keys_node_exists_but_missing_providers_key": ("M01:T01-04-20", "delete_server_keys providers欠落→False"),
-        "test_21_module_reload_counts_def_lines": ("M01:T01-04-21", "module reloadでdef行カバー"),
-        "test_22_delete_server_keys_weird_node_shapes": ("M01:T01-04-22", "delete_server_keys providers欠落/None→False"),
-        "test_23_delete_server_keys_exception_branch": ("M01:T01-04-23", "delete_server_keys 例外→False"),
-        "test_24_save_json_cleanup_remove_exception": ("M01:T01-04-24", "_save_json cleanup remove例外"),
-        "test_25_delete_user_keys_if_line_executed": ("M01:T01-04-25", "delete_user_keys if行到達"),
-        "test_26_put_server_key_node_is_not_dict_recreates": ("M01:T01-04-26", "put_server_key 壊れノード再初期化"),
-        "test_27_put_server_key_providers_is_not_dict_recreates": ("M01:T01-04-27", "put_server_key providers再初期化"),
-        "test_28_delete_user_keys_providers_empty_returns_false": ("M01:T01-04-28", "delete_user_keys providers空→False"),
-        "test_29_delete_user_keys_save_raises_returns_false": ("M01:T01-04-29", "delete_user_keys _save_json例外→False"),
+        "test_01_get_user_keys_partial_success": ("COMMON-SECRET:T01-04-01", "get_user_keys 部分成功"),
+        "test_02_get_server_keys_missing_gid": ("COMMON-SECRET:T01-04-02", "get_server_keys gid無し->{}"),
+        "test_03_save_json_success": ("COMMON-SECRET:T01-04-03", "_save_json 正常系"),
+        "test_04_save_json_type_error_cleanup": ("COMMON-SECRET:T01-04-04", "_save_json TypeError時cleanup"),
+        "test_05_get_user_key_enc_missing_returns_none": ("COMMON-SECRET:T01-04-05", "get_user_key: enc不在->None"),
+        "test_06_delete_user_keys_true_branch": ("COMMON-SECRET:T01-04-06", "delete_user_keys True分岐"),
+        "test_07_load_json_path_not_exists_returns_empty": ("COMMON-SECRET:T01-04-07", "_load_json パス無し->{}"),
+        "test_08_dec_empty_valueerror_handled_via_get_user_key": ("COMMON-SECRET:T01-04-08", "_dec('') ValueErrorをget_user_keyで握り潰す"),
+        "test_09_load_json_recovery_save_fails": ("COMMON-SECRET:T01-04-09", "壊れJSON+復旧save失敗->{}"),
+        "test_10_save_json_cleanup_remove_raises": ("COMMON-SECRET:T01-04-10", "_save_json cleanup remove例外"),
+        "test_11_dec_empty_direct_raises_valueerror": ("COMMON-SECRET:T01-04-11", "_dec('') 直接 -> ValueError"),
+        "test_12_delete_user_keys_both_branches": ("COMMON-SECRET:T01-04-12", "delete_user_keys false/true両枝"),
+        "test_13_load_json_recovery_success": ("COMMON-SECRET:T01-04-13", "_load_json 復旧成功"),
+        "test_14_put_server_key_overwrite_existing": ("COMMON-SECRET:T01-04-14", "put_server_key 上書き"),
+        "test_15_delete_server_keys_node_exists_but_empty": ("COMMON-SECRET:T01-04-15", "delete_server_keys 空→False"),
+        "test_16_get_server_key_undecodable_returns_none": ("COMMON-SECRET:T01-04-16", "get_server_key 復号不可→None"),
+        "test_17_backend_name_direct": ("COMMON-SECRET:T01-04-17", "backend_name 直接"),
+        "test_18_put_server_key_enters_with_block": ("COMMON-SECRET:T01-04-18", "put_server_key with入口網羅"),
+        "test_19__load_json_head_is_executed": ("COMMON-SECRET:T01-04-19", "_load_json 直叩きで先頭到達"),
+        "test_20_delete_server_keys_node_exists_but_missing_providers_key": ("COMMON-SECRET:T01-04-20", "delete_server_keys providers欠落→False"),
+        "test_21_module_reload_counts_def_lines": ("COMMON-SECRET:T01-04-21", "module reloadでdef行カバー"),
+        "test_22_delete_server_keys_weird_node_shapes": ("COMMON-SECRET:T01-04-22", "delete_server_keys providers欠落/None→False"),
+        "test_23_delete_server_keys_exception_branch": ("COMMON-SECRET:T01-04-23", "delete_server_keys 例外→False"),
+        "test_24_save_json_cleanup_remove_exception": ("COMMON-SECRET:T01-04-24", "_save_json cleanup remove例外"),
+        "test_25_delete_user_keys_if_line_executed": ("COMMON-SECRET:T01-04-25", "delete_user_keys if行到達"),
+        "test_26_put_server_key_node_is_not_dict_recreates": ("COMMON-SECRET:T01-04-26", "put_server_key 壊れノード再初期化"),
+        "test_27_put_server_key_providers_is_not_dict_recreates": ("COMMON-SECRET:T01-04-27", "put_server_key providers再初期化"),
+        "test_28_delete_user_keys_providers_empty_returns_false": ("COMMON-SECRET:T01-04-28", "delete_user_keys providers空→False"),
+        "test_29_delete_user_keys_save_raises_returns_false": ("COMMON-SECRET:T01-04-29", "delete_user_keys _save_json例外→False"),
     }
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(SecretStoreMiscTest)
-    run_unittest_suite("M01:T01-04 common/secret/store", suite, mapping)
+    run_unittest_suite("COMMON-SECRET:T01-04 common/secret/store", suite, mapping)
