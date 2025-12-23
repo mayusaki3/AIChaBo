@@ -54,6 +54,7 @@ htmlcov/index.html
 ### 単体テスト
 - [common/secretモジュール単体テスト](common/secret/README_TEST_COMMON_SECRET.md)
 - [common/chatモジュール単体テスト](common/chat/README_TEST_COMMON_CHAT.md)
+- [common/utilsモジュール単体テスト](common/utils/README_TEST_COMMON_UTILS.md)
 - [common/sessionモジュール単体テスト](common/session/README_TEST_COMMON_SESSION.md)
 
 ### 結合テスト

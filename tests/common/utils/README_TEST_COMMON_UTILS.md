@@ -1,0 +1,38 @@
+[テストユーティリティ](../../README_TEST.md) > common/utilsモジュール単体テスト
+
+# common/utilsモジュール単体テスト
+
+## テスト番号と検証内容（Index）
+
+| Suite | 目的（スコープ） | 機能 | モジュール |
+|---|---|---|---|
+| **T01-01** | 機密文字列マスキング | api_key / sk- / ghp_ / AIza 等の秘匿化 | `common/utils/redact.py` |
+
+---
+
+## テスト詳細
+
+### T01-01 : 機密文字列マスキング（redact）
+
+#### ケース
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T01-01-01** | api_key prefix+value | `api_key=XXXX` が `api_key=***` に置換される | `common/utils/redact.py` |
+| **T01-01-02** | API-KEY prefix+value | `API-KEY: XXXX` が `API-KEY: ***` に置換される（大小無視） | `common/utils/redact.py` |
+| **T01-01-03** | sk- 値単体 | `sk-XXXX` が `head(keep)+***` に置換される | `common/utils/redact.py` |
+| **T01-01-04** | ghp_ 値単体 | `ghp_XXXX` が `head(keep)+***` に置換される | `common/utils/redact.py` |
+| **T01-01-05** | AIza 値単体 | `AIzaXXXX` が `head(keep)+***` に置換される | `common/utils/redact.py` |
+| **T01-01-06** | keep 指定 | keep 値変更により表示される head 長が変化する | `common/utils/redact.py` |
+| **T01-01-07** | 非文字列入力 | int 等でも例外なく `str(obj)` が返る | `common/utils/redact.py` |
+| **T01-01-08** | 非一致 | マスク対象でない文字列は変更されない | `common/utils/redact.py` |
+
+
+#### 実行
+
+```bash
+python -m tests.common.utils.T01_Redact_01_redact_test
+```
+
+---
+[テストユーティリティ](../../README_TEST.md) > common/utilsモジュール単体テスト

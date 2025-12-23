@@ -53,8 +53,14 @@ coverage run -a -m tests.common.chat.T08_Sharing_02_migration_test
 coverage run -a -m tests.common.chat.T08_Sharing_03_sharing_guards_test
 coverage run -a -m tests.common.chat.T08_Sharing_04_branch_coverage_test
 
-# T09 : common/chat/
-# coverage run -a -m tests.common.chat.T07_Continuation_01_continuation_test
+### common/sessionモジュール単体テスト
+
+# T01 : common/utils/redact.py
+coverage run -a -m tests.common.utils.T01_Redact_01_redact_test
+
+
+# T01 : common/session/
+# coverage run -a -m tests.common.session.T01_UserSession_01_user_session_test
 
 # T10 : common/chat/
 # coverage run -a -m tests.common.chat.T07_Continuation_01_continuation_test
