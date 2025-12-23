@@ -24,10 +24,9 @@ class RedactTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         from common.utils.redact import redact  # type: ignore
-        cls.redact_fn = staticmethod(redact)  # ← bound method 化の完全回避
+        cls.redact_fn = staticmethod(redact)
 
     def _redact(self, s, keep=4):
-        # staticmethod 化したものを “関数” として呼ぶ
         return self.__class__.redact_fn(s, keep)
 
     # [COMMON-UTILS:T01-01-01] api_key= 形式（prefix+value）マスク

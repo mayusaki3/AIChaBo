@@ -53,10 +53,16 @@ coverage run -a -m tests.common.chat.T08_Sharing_02_migration_test
 coverage run -a -m tests.common.chat.T08_Sharing_03_sharing_guards_test
 coverage run -a -m tests.common.chat.T08_Sharing_04_branch_coverage_test
 
-### common/sessionモジュール単体テスト
+### common/utilsモジュール単体テスト
 
 # T01 : common/utils/redact.py
 coverage run -a -m tests.common.utils.T01_Redact_01_redact_test
+
+# T02 : common/utils/logger.py
+coverage run -a -m tests.common.utils.T02_Logger_01_logger_test
+
+
+### common/sessionモジュール単体テスト
 
 
 # T01 : common/session/
