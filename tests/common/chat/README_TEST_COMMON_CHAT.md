@@ -458,12 +458,27 @@ python -m tests.common.chat.T08_Sharing_03_sharing_guards_test
 
 | 番号 | 目的 | 検証内容 | モジュール |
 |---|---|---|---|
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
 | **T08-04-01** | export 空 session(dict) | `export_session({})` が空 JSON を返し例外を出さない | `common/chat/sharing.py` |
 | **T08-04-02** | export session 非 dict | `export_session([])` / `export_session("x")` のフォールバック経路 | `common/chat/sharing.py` |
 | **T08-04-03** | import version 不明値 | `version` が未定義・未知値の場合の fallback 分岐 | `common/chat/sharing.py` |
-| **T08-04-04** | import messages 非 list | `messages` が list 以外のときに破棄される分岐 | `common/chat/sharing.py` |
-| **T08-04-05** | migrate legacy 空 messages | legacy 形式で messages 欠落時の no-op 分岐 | `common/chat/sharing.py` |
-| **T08-04-06** | share_to_guild no-op | 内部実装が None の場合に安全に return する分岐 | `common/chat/sharing.py` |
+| **T08-04-04** | import messages 非 list | `messages` が list 以外のときに破棄・補正される分岐 | `common/chat/sharing.py` |
+| **T08-04-05** | migrate legacy 空 messages | legacy 形式で messages 欠落時の no-op / 補完分岐 | `common/chat/sharing.py` |
+| **T08-04-06** | share_to_guild no-op | SSM が `share_to_guild` を持たない場合に no-op で終了する分岐 | `common/chat/sharing.py` |
+| **T08-04-07** | share_to_guild 呼び出し | SSM が `share_to_guild` を持つ場合に呼び出される分岐（hasattr True 側） | `common/chat/sharing.py` |
+| **T08-04-08** | import int 変換例外 | `version` / `ts` が int 変換不可でも例外を出さず復元される分岐 | `common/chat/sharing.py` |
+| **T08-04-09** | import sanitize 型不正 | `provider` / `model` / `meta` が型不正の場合に枝刈りされる分岐 | `common/chat/sharing.py` |
+| **T08-04-10** | sanitize messages ガード | `_sanitize_import_dict` で `messages` が list 以外の場合に `None` を返す分岐 | `common/chat/sharing.py` |
+| **T08-04-11** | sanitize 枝刈り詳細 | `_sanitize_import_dict` における `provider` / `model` / `meta` 型チェック分岐 | `common/chat/sharing.py` |
+| **T08-04-12** | to_int except 分岐 | `_to_int_or_none` の int 変換例外（except 側）分岐 | `common/chat/sharing.py` |
+| **T08-04-13** | normalize 非dict | `_normalize_legacy_session` に dict 以外を渡した場合の早期リターン分岐 | `common/chat/sharing.py` |
+| **T08-04-14** | normalize v0 ネスト | version=0 かつ `session` ネスト構造の legacy 分岐 | `common/chat/sharing.py` |
+| **T08-04-15** | share impl hasattr False | `_share_to_server_impl` の hasattr False（no-op）分岐 | `common/chat/sharing.py` |
+| **T08-04-16** | normalize base 非dict補正 | legacy v0 判定後に `base` が dict 以外となる場合に `base = {}` へ補正する分岐 | `common/chat/sharing.py` |
+| **T08-04-17** | export/import meta 保持 | `meta` が非空 dict の場合に export/import で保持される分岐（`_normalized_to_export_dict` / `_sanitize_import_dict`） | `common/chat/sharing.py` |
+| **T08-04-18** | sanitize 非dictガード | `_sanitize_import_dict` に dict 以外を渡した場合に `None` を返す分岐 | `common/chat/sharing.py` |
+| **T08-04-19** | import sanitized None fallback | `import_session` 内で `sanitized is None` の場合に空セッションへフォールバックする分岐 | `common/chat/sharing.py` |
 
 ```bash
 python -m tests.common.chat.T08_Sharing_04_branch_coverage_test
