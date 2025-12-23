@@ -64,12 +64,11 @@ coverage run -a -m tests.common.utils.T02_Logger_01_logger_test
 
 ### common/sessionモジュール単体テスト
 
+# T01 : common/session/user_session_manager.py
+coverage run -a -m tests.common.session.T01_UserSession_01_user_session_test
 
-# T01 : common/session/
-# coverage run -a -m tests.common.session.T01_UserSession_01_user_session_test
-
-# T10 : common/chat/
-# coverage run -a -m tests.common.chat.T07_Continuation_01_continuation_test
+# T02 : common/session/server_session_manager.py
+coverage run -a -m tests.common.chat.T02_ServerSession_01_server_session_test
 
 coverage report -m
 coverage html
