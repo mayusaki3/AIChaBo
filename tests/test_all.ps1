@@ -61,6 +61,9 @@ coverage run -a -m tests.common.utils.T01_Redact_01_redact_test
 # T02 : common/utils/logger.py
 coverage run -a -m tests.common.utils.T02_Logger_01_logger_test
 
+# T03 : common/utils/jsonc.py
+coverage run -a -m tests.common.utils.T03_Jsonc_01_jsonc_test
+
 ### common/sessionモジュール単体テスト
 
 # T01 : common/session/user_session_manager.py

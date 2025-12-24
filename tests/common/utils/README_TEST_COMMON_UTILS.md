@@ -8,6 +8,7 @@
 |---|---|---|---|
 | **T01-01** | 機密文字列マスキング | api_key / sk- / ghp_ / AIza 等の秘匿化 | `common/utils/redact.py` |
 | **T02-01** | ログ出力ユーティリティ | 初期化分岐（handlers有無）/ info・warn・error（redact適用） | `common/utils/logger.py` |
+| **T03-01** | JSONC ロード | // / # / /*...*/ コメント除去 + 末尾カンマ除去 + load_jsonc | `common/utils/jsonc.py` |
 
 ---
 
@@ -52,6 +53,30 @@ python -m tests.common.utils.T01_Redact_01_redact_test
 
 ```bash
 python -m tests.common.utils.T02_Logger_01_logger_test
+```
+
+---
+
+### T03-01 : JSONC ロード（jsonc）
+
+#### ケース
+
+| 番号 | 目的 | 検証内容 | モジュール |
+|---|---|---|---|
+| **T03-01-01** | // コメント | // コメントを除去して loads できる | `common/utils/jsonc.py` |
+| **T03-01-02** | # コメント | # コメントを除去して loads できる | `common/utils/jsonc.py` |
+| **T03-01-03** | block コメント | /*...*/ を除去して loads できる | `common/utils/jsonc.py` |
+| **T03-01-04** | 文字列内保持 | 文字列内の // や /* */ を除去しない | `common/utils/jsonc.py` |
+| **T03-01-05** | 末尾カンマ除去 | object/array の trailing comma を除去 | `common/utils/jsonc.py` |
+| **T03-01-06** | 文字列内カンマ保持 | 文字列内の `,}` `,]` は除去しない | `common/utils/jsonc.py` |
+| **T03-01-07** | 不正 JSON | 不正 JSON は例外 | `common/utils/jsonc.py` |
+| **T03-01-08** | load_jsonc | ファイルを UTF-8 で読み取り loads できる | `common/utils/jsonc.py` |
+| **T03-01-09** | strip 戻り型 | `_strip_*` が str を返す | `common/utils/jsonc.py` |
+
+#### 実行
+
+```bash
+python -m tests.common.utils.T03_Jsonc_01_jsonc_test
 ```
 
 ---
