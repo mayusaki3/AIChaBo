@@ -61,14 +61,14 @@ coverage run -a -m tests.common.utils.T01_Redact_01_redact_test
 # T02 : common/utils/logger.py
 coverage run -a -m tests.common.utils.T02_Logger_01_logger_test
 
-
 ### common/sessionモジュール単体テスト
 
 # T01 : common/session/user_session_manager.py
 coverage run -a -m tests.common.session.T01_UserSession_01_user_session_test
 
 # T02 : common/session/server_session_manager.py
-coverage run -a -m tests.common.chat.T02_ServerSession_01_server_session_test
+coverage run -a -m tests.common.session.T02_ServerSession_01_server_session_test
+coverage run -a -m tests.common.session.T02_ServerSession_02_server_session_branch_test
 
 coverage report -m
 coverage html
