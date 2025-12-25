@@ -1,7 +1,10 @@
 # common/utils/prefetch.py
 from __future__ import annotations
+
 from typing import List, Tuple
+
 from common.utils.webread_utils import read_urls, format_read_results_for_llm
+
 
 async def prefetch_doc_summaries(
     urls: List[str],
@@ -14,6 +17,7 @@ async def prefetch_doc_summaries(
     urls = [u for u in (urls or []) if u]
     if not urls:
         return "", tuple()
+
     items = await read_urls(
         urls,
         max_bytes=max_bytes,
@@ -24,6 +28,7 @@ async def prefetch_doc_summaries(
         language_hint=language_hint,
         require_citations=False,
     )
+
     formatted = format_read_results_for_llm(items, require_citations=False)
     sig = tuple(urls)[:8]
     return formatted, sig
