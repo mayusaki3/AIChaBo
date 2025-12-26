@@ -59,21 +59,21 @@ python -m tests.common.session.T02_ServerSession_01_server_session_test
 
 ---
 
-### T02-02 : ServerSession 分岐網羅（SSM）
+### T02-02 : ServerSession 管理（SSM）分岐（Branch）
 
 #### ケース
 
 | 番号 | 目的 | 検証内容 | モジュール |
 |---|---|---|---|
-| **T02-02-01** | 起動時ロード | `PATH.exists()==False` の場合、shared/opts ともに空で起動 | `common/session/server_session_manager.py` |
-| **T02-02-02** | 起動時例外(shared) | shared 読み込み例外時に空へ復旧 | `common/session/server_session_manager.py` |
-| **T02-02-03** | 起動時例外(opts) | opts 読み込み例外時に空へ復旧 | `common/session/server_session_manager.py` |
-| **T02-02-04** | api_key 再帰除去 | dict/list を含む深い階層で `api_key` が除去される | `common/session/server_session_manager.py` |
-| **T02-02-05** | chat 型不正 | `chat` が dict 以外の場合 `ValueError` | `common/session/server_session_manager.py` |
-| **T02-02-06** | trim 正規化 | provider/model の trim 後の値が保存される | `common/session/server_session_manager.py` |
-| **T02-02-07** | clear_option 後始末 | option が空になった場合に sid ノードが削除される | `common/session/server_session_manager.py` |
-| **T02-02-08** | clear_option sid未登録 | 未登録 server_id に対する `clear_option()` は no-op で例外にならない | `common/session/server_session_manager.py` |
-| **T02-02-09** | clear_option key未登録 | 登録済 server_id でも存在しない key の `clear_option()` は no-op で例外にならない | `common/session/server_session_manager.py` |
+| **T02-02-01** | 起動時ロード（exists False） | shared/opts の保存ファイルが存在しない場合に空で起動する | `common/session/server_session_manager.py` |
+| **T02-02-02** | 起動時ロード（shared 読み込み例外） | shared の read_text が例外でも復旧して空で起動する | `common/session/server_session_manager.py` |
+| **T02-02-03** | 起動時ロード（opts 読み込み例外） | opts の read_text が例外でも復旧して空で起動する | `common/session/server_session_manager.py` |
+| **T02-02-04** | _strip_api_keys 再帰除去 | dict/list/other の混在でも api_key を再帰的に除去する | `common/session/server_session_manager.py` |
+| **T02-02-05** | chat 型不正 | chat が dict 以外の場合は ValueError | `common/session/server_session_manager.py` |
+| **T02-02-06** | provider/model trim | provider/model の前後空白を除去して保存される | `common/session/server_session_manager.py` |
+| **T02-02-07** | clear_option: sid 空なら削除 | sid の dict が空になった場合に sid 自体を削除する | `common/session/server_session_manager.py` |
+| **T02-02-08** | clear_option: sid 未登録 no-op | 未登録 sid を clear しても例外なく no-op で終了する | `common/session/server_session_manager.py` |
+| **T02-02-09** | clear_option: key 未登録 no-op | 登録済 sid でも未登録 key を clear して例外なく no-op で終了する | `common/session/server_session_manager.py` |
 
 #### 実行
 

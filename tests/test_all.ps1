@@ -68,6 +68,7 @@ coverage run -a -m tests.common.utils.T08_WebReadUtils_01_webread_utils_test
 coverage run -a -m tests.common.utils.T08_WebReadUtils_02_webread_utils_branch_test
 coverage run -a -m tests.common.utils.T08_WebReadUtils_03_webread_utils_remaining_branch_test
 coverage run -a -m tests.common.utils.T08_WebReadUtils_04_webread_utils_more_branch_test
+coverage run -a -m tests.common.utils.T08_WebReadUtils_05_webread_utils_last_branch_test
 
 ### common/sessionモジュール単体テスト
 
