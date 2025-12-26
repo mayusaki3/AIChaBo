@@ -77,6 +77,8 @@ coverage run -a -m tests.common.session.T01_UserSession_01_user_session_test
 # T02 : common/session/server_session_manager.py
 coverage run -a -m tests.common.session.T02_ServerSession_01_server_session_test
 coverage run -a -m tests.common.session.T02_ServerSession_02_server_session_branch_test
+# T03 : common/session/thread_context_manager.py
+coverage run -a -m tests.common.session.T03_ThreadContext_01_thread_context_test
 
 coverage report -m
 coverage html
