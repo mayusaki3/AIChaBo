@@ -51,6 +51,24 @@ htmlcov/index.html
 --- SUMMARY COMMON-CHAT:T01-01 common/chat/provider: ✅=4 / ❌=0 / TOTAL=4 ---
 ```
 
+### マッピング未登録時（-?? 表示）の扱い
+
+`tests/_report.py` は、`run_unittest_suite(..., mapping)` に渡された **mapping(dict)** に
+テストメソッドが見つからない場合、テストIDを **`<suite_id>-??`** として表示する。
+
+例：
+```
+✅[COMMON-SECRET:T01-04 common/secret/store-??] test_99_unmapped_case
+```
+
+これは **「テストIDのマッピングが未登録」**を示すフォールバックであり、
+README 側の表記やモジュール名が未確定であることを意味しない。
+
+運用ルール：
+- 原則として、コミット対象のテストは mapping を必ず揃え、`-??` 表示を残さない。
+- 仕様/棚卸し未完のテストは、ファイル名プレフィックス `_Txx_...` 等で明示し、
+  その間は mapping 未整備（-?? 表示）を許容してもよい（運用で選択）。
+
 ### 単体テスト
 - [common/secretモジュール単体テスト](common/secret/README_TEST_COMMON_SECRET.md)
 - [common/chatモジュール単体テスト](common/chat/README_TEST_COMMON_CHAT.md)

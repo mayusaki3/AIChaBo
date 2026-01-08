@@ -7,7 +7,7 @@ coverage run -a -m tests.common.secret.T01_SecretStore_01_store_test
 coverage run -a -m tests.common.secret.T01_SecretStore_02_store_edge_test
 coverage run -a -m tests.common.secret.T01_SecretStore_03_store_init_test
 coverage run -a -m tests.common.secret.T01_SecretStore_04_store_misc_test
-coverage run -a -m tests.common.secret.T01_SecretStore_05-impl_store_misc_test
+coverage run -a -m tests.common.secret.T01_SecretStore_05impl_store_misc_test
 
 # ## common/chatモジュール単体テスト
 

@@ -2,131 +2,115 @@
 
 # common/secret モジュール単体テスト
 
-本書は **common/secret/store.py** に対する  
-単体テストの構成・テストID・検証内容を定義する。
+本書は `common/secret/*` の単体テストについて、  
+**(1) 仕様テスト（docs が正）** と **(2) impl テスト（カバレッジ目的・mapping が正）** を分けて示す。
 
-本 README は **tests 側の実装・運用視点** のドキュメントであり、  
-仕様上の位置付けは以下を参照する。
+## 1. 対象
 
-- docs/ja-JP/テスト仕様/コア仕様/01_認証・秘密ストア_テスト仕様.md
+| 区分 | 対象モジュール | 説明 |
+|---|---|---|
+| 仕様 | `common/secret/store.py` | 秘密ストア（暗号化して永続化、復旧/堅牢性含む） |
+| impl | `common/secret/store.py` | 仕様に含めにくい例外分岐等の到達（カバレッジ目的） |
 
----
+## 2. 実行方法
 
-## テスト番号と検証内容（Index）
+### 2.1 仕様テスト（単体）
 
-| Suite | 目的（スコープ） | 機能 | モジュール |
-|---|---|---|---|
-| **T01-01** | SecretStore 基本 | encrypt / decrypt | `common/secret/store.py` |
-| **T01-02** | SecretStore 競合制御 | concurrent LWW | `common/secret/store.py` |
-| **T01-03** | SecretStore 復旧 | broken json recovery | `common/secret/store.py` |
-| **T01-04** | SecretStore 削除系 | delete robustness | `common/secret/store.py` |
-| **T01-05 (impl)** | SecretStore 実装補助 | branch / exception / coverage | `common/secret/store.py` |
-
----
-
-## テスト詳細
-
-### T01-01 : SecretStore 基本（暗号化）
-
-#### ケース
-
-| 番号 | 目的 | 検証内容 | モジュール |
-|---|---|---|---|
-| **T01-01-01** | user key R/W | roundtrip | `common/secret/store.py` |
-| **T01-01-02** | server key R/W | roundtrip + has + delete | `common/secret/store.py` |
-| **T01-01-03** | LWW（user） | 並列 put → LWW | `common/secret/store.py` |
-| **T01-01-04** | LWW（server） | 並列 put → LWW | `common/secret/store.py` |
-
-#### 実行
-
-```bash
+```powershell
+# T01 (spec)
 python -m tests.common.secret.T01_SecretStore_01_store_test
-```
-
----
-
-### T01-02 : SecretStore 競合・境界条件
-
-#### ケース
-
-| 番号 | 目的 | 検証内容 | モジュール |
-|---|---|---|---|
-| **T01-02-01** | 入力検証 | provider 空 → ValueError | `common/secret/store.py` |
-| **T01-02-02** | 入力検証 | provider 空（server） → ValueError | `common/secret/store.py` |
-| **T01-02-03** | 空入力 | get_user_key → None | `common/secret/store.py` |
-| **T01-02-04** | 空入力 | get_server_key → None | `common/secret/store.py` |
-| **T01-02-05** | 存在判定 | has_server_any_key | `common/secret/store.py` |
-| **T01-02-06** | 削除安全性 | delete_server_keys 安全 | `common/secret/store.py` |
-| **T01-02-07** | 後方互換 | prefix 無しトークン復号 | `common/secret/store.py` |
-| **T01-02-08** | JSON 復旧 | 壊れ JSON self-heal | `common/secret/store.py` |
-| **T01-02-09** | 全削除 | delete_user_keys | `common/secret/store.py` |
-
-#### 実行
-
-```bash
 python -m tests.common.secret.T01_SecretStore_02_store_edge_test
-```
-
----
-
-### T01-03 : SecretStore 初期化・復旧
-
-#### ケース
-
-| 番号 | 目的 | 検証内容 | モジュール |
-|---|---|---|---|
-| **T01-03-01** | 環境変数鍵 | AC_MASTER_KEY 優先 | `common/secret/store.py` |
-| **T01-03-02** | 鍵生成 | master.key 生成＋chmod 例外 | `common/secret/store.py` |
-| **T01-03-03** | JSON 無 | _load_json → {} | `common/secret/store.py` |
-| **T01-03-04** | 破損スキップ | user key | `common/secret/store.py` |
-| **T01-03-05** | 破損スキップ | server key | `common/secret/store.py` |
-| **T01-03-06** | 未知 provider | get_server_key → None | `common/secret/store.py` |
-| **T01-03-07** | 書込失敗 | tmp cleanup | `common/secret/store.py` |
-
-#### 実行
-
-```bash
 python -m tests.common.secret.T01_SecretStore_03_store_init_test
-```
-
----
-
-### T01-04 : SecretStore 削除系（仕様）
-
-#### ケース
-
-| 番号 | 目的 | 検証内容 | モジュール |
-|---|---|---|---|
-| **T01-04-01** | 部分成功 | user keys 部分復号 | `common/secret/store.py` |
-| **T01-04-02** | 未登録 gid | get_server_keys → {} | `common/secret/store.py` |
-| **T01-04-03** | 上書き | put_server_key overwrite | `common/secret/store.py` |
-| **T01-04-04** | 空削除 | delete_* empty → False | `common/secret/store.py` |
-
-#### 実行
-
-```bash
 python -m tests.common.secret.T01_SecretStore_04_store_misc_test
 ```
 
----
+### 2.2 impl テスト（単体）
 
-### T01-05 : SecretStore 実装補助（impl）
+- (impl) は **カバレッジ到達を主目的**とする。
+- このため **mapping が正（-?? を出さない）**ことが前提。
 
-> 本スイートは **仕様には含まれない**。  
-> 分岐・例外・行カバレッジを目的とする。
-
-#### 内容
-
-- 内部 util 例外経路
-- tmp cleanup 分岐
-- def 行 / with 行 到達
-- reload によるカバレッジ補助
-
-#### 実行
-
-```bash
-python -m tests.common.secret.T01_SecretStore_05-impl_store_misc_test
+```powershell
+# T01 (impl)
+python -m tests.common.secret.T01_SecretStore_05impl_store_misc_test
 ```
+
+### 2.3 カバレッジ計測（推奨）
+
+```powershell
+coverage erase
+
+# spec
+coverage run -a -m tests.common.secret.T01_SecretStore_01_store_test
+coverage run -a -m tests.common.secret.T01_SecretStore_02_store_edge_test
+coverage run -a -m tests.common.secret.T01_SecretStore_03_store_init_test
+coverage run -a -m tests.common.secret.T01_SecretStore_04_store_misc_test
+
+# impl
+coverage run -a -m tests.common.secret.T01_SecretStore_05impl_store_misc_test
+
+coverage report -m
+```
+
+## 3. テストケース一覧（仕様）
+
+### 3.1 [COMMON-SECRET:T01-01] encrypt/decrypt roundtrip + LWW（基本）
+
+| テストID | 観点 | 対象 |
+|---|---|---|
+| COMMON-SECRET:T01-01-01 | user鍵: put/get roundtrip | SecretStore |
+| COMMON-SECRET:T01-01-02 | server鍵: roundtrip + has + delete | SecretStore |
+| COMMON-SECRET:T01-01-03 | user鍵: 並列 put -> LWW | SecretStore |
+| COMMON-SECRET:T01-01-04 | server鍵: 並列 put -> LWW | SecretStore |
+
+### 3.2 [COMMON-SECRET:T01-02] edge（入力ガード/互換/安全性）
+
+| テストID | 観点 | 対象 |
+|---|---|---|
+| COMMON-SECRET:T01-02-01 | put_user: provider空 -> ValueError | SecretStore |
+| COMMON-SECRET:T01-02-02 | put_server: provider空 -> ValueError | SecretStore |
+| COMMON-SECRET:T01-02-03 | get_user: provider空 -> None | SecretStore |
+| COMMON-SECRET:T01-02-04 | get_server: provider空 -> None | SecretStore |
+| COMMON-SECRET:T01-02-05 | has_server_any_key False/True | SecretStore |
+| COMMON-SECRET:T01-02-06 | delete_server_keys 安全 | SecretStore |
+| COMMON-SECRET:T01-02-07 | 旧prefixなし互換 | SecretStore |
+| COMMON-SECRET:T01-02-08 | 壊れJSON復旧 | SecretStore |
+| COMMON-SECRET:T01-02-09 | delete_user_keys 全削除 | SecretStore |
+
+### 3.3 [COMMON-SECRET:T01-03] init/recovery（起動時）
+
+| テストID | 観点 | 対象 |
+|---|---|---|
+| COMMON-SECRET:T01-03-01 | env優先: master.key未生成 | SecretStore |
+| COMMON-SECRET:T01-03-02 | env無し: master.key生成 + chmod例外経路 | SecretStore |
+| COMMON-SECRET:T01-03-03 | _load_json: pathなし -> {} | SecretStore |
+| COMMON-SECRET:T01-03-04 | 破損トークン(user)はスキップ | SecretStore |
+| COMMON-SECRET:T01-03-05 | 破損トークン(server)はスキップ | SecretStore |
+| COMMON-SECRET:T01-03-06 | 未知provider -> None | SecretStore |
+| COMMON-SECRET:T01-03-07 | _save_json: 失敗時tmp削除 | SecretStore |
+
+### 3.4 [COMMON-SECRET:T01-04] misc（堅牢性・部分成功）
+
+| テストID | 観点 | 対象 |
+|---|---|---|
+| COMMON-SECRET:T01-04-01 | get_user_keys 部分成功（破損トークンはスキップ） | SecretStore |
+| COMMON-SECRET:T01-04-02 | get_server_keys gid無し->{} | SecretStore |
+| COMMON-SECRET:T01-04-03 | put_server_key 上書き | SecretStore |
+| COMMON-SECRET:T01-04-04 | delete_* 空/欠落でもFalse（堅牢性） | SecretStore |
+
+## 4. テストケース一覧（impl）
+
+### 4.1 [COMMON-SECRET:T01-05] (impl) branch/exception coverage
+
+- **目的**：仕様テストでは要求しにくい分岐（例外処理など）に到達し、カバレッジを確保する。  
+- **前提**：`tests/_report.py` の mapping が正であり、`-??` 表示を出さない（mapping欠落はNG）。
+
+| テストID | 観点 | 対象 |
+|---|---|---|
+| COMMON-SECRET:T01-05-01 | backend_name が実装名を返す | SecretStore |
+| COMMON-SECRET:T01-05-02 | _dec('') は ValueError | SecretStore |
+| COMMON-SECRET:T01-05-03 | _load_json: パス無し -> {} | SecretStore |
+| COMMON-SECRET:T01-05-04 | _load_json: 破損JSON→復旧save失敗でも {} を返す | SecretStore |
+| COMMON-SECRET:T01-05-05 | _save_json: cleanup unlink 失敗を握りつぶす | SecretStore |
 
 ---
 [テストユーティリティ](../../README_TEST.md) > common/secretモジュール単体テスト
