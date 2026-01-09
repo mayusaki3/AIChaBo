@@ -35,8 +35,8 @@ $Tests = @(
     "tests.common.session.T01_user_session_02impl_user_session_test",
 
     # T02 : common/session/server_session_manager.py
-    # tests.common.session.T02_ServerSession_01_server_session_test
-    # tests.common.session.T02_ServerSession_02_server_session_branch_test
+    "tests.common.session.T02_server_session_01_server_session_test",
+    "tests.common.session.T02_server_session_02impl_server_session_test",
 
 # T03 : common/session/thread_context_manager.py
 #tests.common.session.T03_ThreadContext_01_thread_context_test
@@ -105,7 +105,7 @@ $Tests = @(
 )
 
 if ($Filter -eq "?") {
-    Write-Error "繝・せ繝医さ繝槭Φ繝我ｸ隕ｧ:"
+    Write-Host "テストコマンド一覧:"
     foreach ($test in $Tests) {
         if ($Test -ne "") {
             Write-Host "> python -X utf8 -m coverage run -a -m $test"
@@ -120,7 +120,7 @@ if ($Filter -ne "") {
 }
 
 if ($Tests.Count -eq 0) {
-    Write-Error "隧ｲ蠖薙☆繧九ユ繧ｹ繝医′縺ゅｊ縺ｾ縺帙ｓ: $Filter"
+    Write-Host "該当するテストがありません: $Filter"
     exit 1
 }
 
