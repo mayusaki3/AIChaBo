@@ -38,8 +38,9 @@ $Tests = @(
     "tests.common.session.T02_server_session_01_server_session_test",
     "tests.common.session.T02_server_session_02impl_server_session_test",
 
-# T03 : common/session/thread_context_manager.py
-#tests.common.session.T03_ThreadContext_01_thread_context_test
+    # T03 : common/session/thread_context_manager.py
+    "tests.common.session.T03_thread_context_01_thread_context_test",
+    "tests.common.session.T03_thread_context_02impl_thread_context_test",
 
 
 # ## common/chat繝｢繧ｸ繝･繝ｼ繝ｫ蜊倅ｽ薙ユ繧ｹ繝・
