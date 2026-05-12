@@ -11,6 +11,8 @@ from ai.openai.openai_api import generate_image_from_prompt
 OPENAI_BASE = "https://api.openai.com/v1"
 OPENAI_MODELS_ENDPOINT = f"{OPENAI_BASE}/models"
 OPENAI_CHAT_ENDPOINT   = f"{OPENAI_BASE}/chat/completions"
+OPENAI_CHAT_VALIDATION_MAX_TOKENS = 64
+OPENAI_VISION_VALIDATION_MAX_TOKENS = 128
 
 
 def _png_chunk(chunk_type: bytes, data: bytes) -> bytes:
@@ -63,7 +65,7 @@ async def _get_json(session: aiohttp.ClientSession, url: str, headers: dict):
         return resp.status, await resp.text(), resp.headers
 
 async def _post_json(session: aiohttp.ClientSession, url: str, headers: dict, payload: dict):
-    async with session.post(url, headers=headers, json=payload, timeout=aiohttp.ClientTimeout(total=12)) as resp:
+    async with session.post(url, headers=headers, json=payload, timeout=aiohttp.ClientTimeout(total=30)) as resp:
         return resp.status, await resp.text(), resp.headers
 
 # APIキーのチェック
@@ -99,10 +101,10 @@ async def is_openai_chat_model_available(api_key: str, model_name: str) -> bool:
     }
     payload = _set_completion_limit({
         "model": model_name,
-        "messages": [{"role": "user", "content": "ping"}],
-    }, model_name, 1)
+        "messages": [{"role": "user", "content": "Reply with OK."}],
+    }, model_name, OPENAI_CHAT_VALIDATION_MAX_TOKENS)
     try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
             status, text, _ = await _post_json(session, OPENAI_CHAT_ENDPOINT, headers, payload)
             if status == 200:
                 return True
@@ -129,15 +131,15 @@ async def is_openai_vision_model_available(api_key: str, model_name: str) -> boo
         "model": model_name,
         "messages": [
             {"role": "user", "content": [
-                {"type": "text", "text": "Describe this image."},
+                {"type": "text", "text": "Describe this image briefly."},
                 {"type": "image_url", "image_url": {
                     "url": _build_openai_vision_test_image_url()
                 }}
             ]}
         ],
-    }, model_name, 10)
+    }, model_name, OPENAI_VISION_VALIDATION_MAX_TOKENS)
     try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
             status, text, _ = await _post_json(session, OPENAI_CHAT_ENDPOINT, headers, payload)
             if status == 200:
                 return True
