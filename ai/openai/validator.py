@@ -1,5 +1,9 @@
 import aiohttp
 import json
+import base64
+import binascii
+import struct
+import zlib
 from ai.openai.openai_api import generate_image_from_prompt
 
 # 認証情報で指定されたAPIが利用可能かチェックする
@@ -7,6 +11,53 @@ from ai.openai.openai_api import generate_image_from_prompt
 OPENAI_BASE = "https://api.openai.com/v1"
 OPENAI_MODELS_ENDPOINT = f"{OPENAI_BASE}/models"
 OPENAI_CHAT_ENDPOINT   = f"{OPENAI_BASE}/chat/completions"
+OPENAI_CHAT_VALIDATION_MAX_TOKENS = 64
+OPENAI_VISION_VALIDATION_MAX_TOKENS = 128
+
+
+def _png_chunk(chunk_type: bytes, data: bytes) -> bytes:
+    """PNGチャンクを作成する。"""
+    length = struct.pack(">I", len(data))
+    crc = struct.pack(">I", binascii.crc32(chunk_type + data) & 0xFFFFFFFF)
+    return length + chunk_type + data + crc
+
+
+def _build_openai_vision_test_image_url() -> str:
+    """OpenAI Vision検証用の小さなPNG画像をdata URLとして生成する。"""
+    width = 32
+    height = 32
+    rows = []
+
+    for y in range(height):
+        row = bytearray()
+        for x in range(width):
+            is_border = (8 <= x <= 24 and y in (8, 24)) or (8 <= y <= 24 and x in (8, 24))
+            row.extend((0, 0, 0) if is_border else (255, 255, 255))
+        rows.append(bytes([0]) + bytes(row))
+
+    raw_image = b"".join(rows)
+    png = b"\x89PNG\r\n\x1a\n"
+    png += _png_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+    png += _png_chunk(b"IDAT", zlib.compress(raw_image))
+    png += _png_chunk(b"IEND", b"")
+    encoded = base64.b64encode(png).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
+def _uses_max_completion_tokens(model_name: str) -> bool:
+    """max_tokensの代わりにmax_completion_tokensが必要なOpenAIモデルか判定する。"""
+    name = (model_name or "").strip().lower()
+    return name.startswith(("gpt-5", "o1", "o3", "o4"))
+
+
+def _set_completion_limit(payload: dict, model_name: str, value: int) -> dict:
+    """モデルに応じて出力トークン数指定パラメータを設定する。"""
+    if _uses_max_completion_tokens(model_name):
+        payload["max_completion_tokens"] = value
+    else:
+        payload["max_tokens"] = value
+    return payload
+
 
 # 共通HTTPユーティリティ
 async def _get_json(session: aiohttp.ClientSession, url: str, headers: dict):
@@ -14,7 +65,7 @@ async def _get_json(session: aiohttp.ClientSession, url: str, headers: dict):
         return resp.status, await resp.text(), resp.headers
 
 async def _post_json(session: aiohttp.ClientSession, url: str, headers: dict, payload: dict):
-    async with session.post(url, headers=headers, json=payload, timeout=aiohttp.ClientTimeout(total=12)) as resp:
+    async with session.post(url, headers=headers, json=payload, timeout=aiohttp.ClientTimeout(total=30)) as resp:
         return resp.status, await resp.text(), resp.headers
 
 # APIキーのチェック
@@ -48,13 +99,12 @@ async def is_openai_chat_model_available(api_key: str, model_name: str) -> bool:
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-    payload = {
+    payload = _set_completion_limit({
         "model": model_name,
-        "messages": [{"role": "user", "content": "ping"}],
-        "max_tokens": 1,
-    }
+        "messages": [{"role": "user", "content": "Reply with OK."}],
+    }, model_name, OPENAI_CHAT_VALIDATION_MAX_TOKENS)
     try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
             status, text, _ = await _post_json(session, OPENAI_CHAT_ENDPOINT, headers, payload)
             if status == 200:
                 return True
@@ -77,20 +127,19 @@ async def is_openai_vision_model_available(api_key: str, model_name: str) -> boo
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-    payload = {
+    payload = _set_completion_limit({
         "model": model_name,
         "messages": [
             {"role": "user", "content": [
-                {"type": "text", "text": "Describe this image."},
+                {"type": "text", "text": "Describe this image briefly."},
                 {"type": "image_url", "image_url": {
-                    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/640px-PNG_transparency_demonstration_1.png"
+                    "url": _build_openai_vision_test_image_url()
                 }}
             ]}
         ],
-        "max_tokens": 10,
-    }
+    }, model_name, OPENAI_VISION_VALIDATION_MAX_TOKENS)
     try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
             status, text, _ = await _post_json(session, OPENAI_CHAT_ENDPOINT, headers, payload)
             if status == 200:
                 return True
