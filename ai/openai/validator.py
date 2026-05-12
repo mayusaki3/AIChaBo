@@ -42,6 +42,21 @@ def _build_openai_vision_test_image_url() -> str:
     return f"data:image/png;base64,{encoded}"
 
 
+def _uses_max_completion_tokens(model_name: str) -> bool:
+    """max_tokensの代わりにmax_completion_tokensが必要なOpenAIモデルか判定する。"""
+    name = (model_name or "").strip().lower()
+    return name.startswith(("gpt-5", "o1", "o3", "o4"))
+
+
+def _set_completion_limit(payload: dict, model_name: str, value: int) -> dict:
+    """モデルに応じて出力トークン数指定パラメータを設定する。"""
+    if _uses_max_completion_tokens(model_name):
+        payload["max_completion_tokens"] = value
+    else:
+        payload["max_tokens"] = value
+    return payload
+
+
 # 共通HTTPユーティリティ
 async def _get_json(session: aiohttp.ClientSession, url: str, headers: dict):
     async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
@@ -82,11 +97,10 @@ async def is_openai_chat_model_available(api_key: str, model_name: str) -> bool:
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-    payload = {
+    payload = _set_completion_limit({
         "model": model_name,
         "messages": [{"role": "user", "content": "ping"}],
-        "max_tokens": 1,
-    }
+    }, model_name, 1)
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
             status, text, _ = await _post_json(session, OPENAI_CHAT_ENDPOINT, headers, payload)
@@ -111,7 +125,7 @@ async def is_openai_vision_model_available(api_key: str, model_name: str) -> boo
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-    payload = {
+    payload = _set_completion_limit({
         "model": model_name,
         "messages": [
             {"role": "user", "content": [
@@ -121,8 +135,7 @@ async def is_openai_vision_model_available(api_key: str, model_name: str) -> boo
                 }}
             ]}
         ],
-        "max_tokens": 10,
-    }
+    }, model_name, 10)
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
             status, text, _ = await _post_json(session, OPENAI_CHAT_ENDPOINT, headers, payload)
