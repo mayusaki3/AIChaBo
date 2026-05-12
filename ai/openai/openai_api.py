@@ -4,6 +4,13 @@ import aiohttp, base64, asyncio, json
 OPENAI_VISION_ENDPOINT = "https://api.openai.com/v1/chat/completions"
 OPENAI_IMAGEGEN_ENDPOINT = "https://api.openai.com/v1/images/generations"
 
+
+def _uses_max_completion_tokens(model_name: str) -> bool:
+    """max_tokensの代わりにmax_completion_tokensが必要なOpenAIモデルか判定する。"""
+    name = (model_name or "").strip().lower()
+    return name.startswith(("gpt-5", "o1", "o3", "o4"))
+
+
 # 認証情報で指定されたAPIを呼び出す
 
 # ChatGPTにメッセージ送信
@@ -12,7 +19,7 @@ async def call_chatgpt(context_list: list[dict], api_key: str, model: str = "gpt
     for msg in context_list:
         if msg.startswith("\s"):
             messages.append({"role": "system", "content": msg.replace("\s", "", 1).strip()})
-        else:   
+        else:
             if msg.startswith("AIChatBot:"):
                 messages.append({"role": "assistant", "content": msg.replace("AIChatBot:", "", 1).strip()})
             else:
@@ -20,11 +27,18 @@ async def call_chatgpt(context_list: list[dict], api_key: str, model: str = "gpt
 
     try:
         client = AsyncOpenAI(api_key=api_key)
-        response = await client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=max_tokens
-        )
+
+        payload = {
+            "model": model,
+            "messages": messages,
+        }
+
+        if _uses_max_completion_tokens(model):
+            payload["max_completion_tokens"] = max_tokens
+        else:
+            payload["max_tokens"] = max_tokens
+
+        response = await client.chat.completions.create(**payload)
         return response.choices[0].message.content
     except Exception as e:
         return f"❌ OpenAI 応答エラー: {e}"
@@ -37,7 +51,16 @@ async def analyze_openai_vision(image_urls: list[str], prompt: str, api_key: str
     for u in (image_urls or [])[:8]:
         content.append({"type": "image_url", "image_url": {"url": u}})
 
-    payload = {"model": model, "messages": [{"role": "user", "content": content}], "max_tokens": max_tokens}
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": content}],
+    }
+
+    if _uses_max_completion_tokens(model):
+        payload["max_completion_tokens"] = max_tokens
+    else:
+        payload["max_tokens"] = max_tokens
+
     try:
         async with aiohttp.ClientSession() as sess:
             async with sess.post(OPENAI_VISION_ENDPOINT, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=60)) as resp:
@@ -70,14 +93,14 @@ async def generate_image_from_prompt(prompt: str, api_key: str, model: str, size
     }
     if model == "dall-e-3":
         payload["response_format"] = "b64_json"
-    
+
     timeout = aiohttp.ClientTimeout(total=timeout_sec)
     async with aiohttp.ClientSession(timeout=timeout) as session:
         async with session.post(OPENAI_IMAGEGEN_ENDPOINT, headers=headers, json=payload) as resp:
             data = await resp.json()
             if resp.status != 200:
                 raise RuntimeError(f"OpenAI image gen failed: {resp.status} / {data}")
-           
+
         if not data.get("data"):
             raise RuntimeError(f"OpenAI image gen empty response: {data}")
 
