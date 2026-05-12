@@ -7,6 +7,10 @@ from ai.openai.openai_api import generate_image_from_prompt
 OPENAI_BASE = "https://api.openai.com/v1"
 OPENAI_MODELS_ENDPOINT = f"{OPENAI_BASE}/models"
 OPENAI_CHAT_ENDPOINT   = f"{OPENAI_BASE}/chat/completions"
+OPENAI_VISION_TEST_IMAGE_URL = (
+    "data:image/png;base64,"
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+)
 
 # 共通HTTPユーティリティ
 async def _get_json(session: aiohttp.ClientSession, url: str, headers: dict):
@@ -83,7 +87,7 @@ async def is_openai_vision_model_available(api_key: str, model_name: str) -> boo
             {"role": "user", "content": [
                 {"type": "text", "text": "Describe this image."},
                 {"type": "image_url", "image_url": {
-                    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/640px-PNG_transparency_demonstration_1.png"
+                    "url": OPENAI_VISION_TEST_IMAGE_URL
                 }}
             ]}
         ],
