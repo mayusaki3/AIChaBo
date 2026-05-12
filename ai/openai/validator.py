@@ -1,5 +1,9 @@
 import aiohttp
 import json
+import base64
+import binascii
+import struct
+import zlib
 from ai.openai.openai_api import generate_image_from_prompt
 
 # 認証情報で指定されたAPIが利用可能かチェックする
@@ -7,10 +11,36 @@ from ai.openai.openai_api import generate_image_from_prompt
 OPENAI_BASE = "https://api.openai.com/v1"
 OPENAI_MODELS_ENDPOINT = f"{OPENAI_BASE}/models"
 OPENAI_CHAT_ENDPOINT   = f"{OPENAI_BASE}/chat/completions"
-OPENAI_VISION_TEST_IMAGE_URL = (
-    "data:image/png;base64,"
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
-)
+
+
+def _png_chunk(chunk_type: bytes, data: bytes) -> bytes:
+    """PNGチャンクを作成する。"""
+    length = struct.pack(">I", len(data))
+    crc = struct.pack(">I", binascii.crc32(chunk_type + data) & 0xFFFFFFFF)
+    return length + chunk_type + data + crc
+
+
+def _build_openai_vision_test_image_url() -> str:
+    """OpenAI Vision検証用の小さなPNG画像をdata URLとして生成する。"""
+    width = 32
+    height = 32
+    rows = []
+
+    for y in range(height):
+        row = bytearray()
+        for x in range(width):
+            is_border = (8 <= x <= 24 and y in (8, 24)) or (8 <= y <= 24 and x in (8, 24))
+            row.extend((0, 0, 0) if is_border else (255, 255, 255))
+        rows.append(bytes([0]) + bytes(row))
+
+    raw_image = b"".join(rows)
+    png = b"\x89PNG\r\n\x1a\n"
+    png += _png_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+    png += _png_chunk(b"IDAT", zlib.compress(raw_image))
+    png += _png_chunk(b"IEND", b"")
+    encoded = base64.b64encode(png).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
 
 # 共通HTTPユーティリティ
 async def _get_json(session: aiohttp.ClientSession, url: str, headers: dict):
@@ -87,7 +117,7 @@ async def is_openai_vision_model_available(api_key: str, model_name: str) -> boo
             {"role": "user", "content": [
                 {"type": "text", "text": "Describe this image."},
                 {"type": "image_url", "image_url": {
-                    "url": OPENAI_VISION_TEST_IMAGE_URL
+                    "url": _build_openai_vision_test_image_url()
                 }}
             ]}
         ],
