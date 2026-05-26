@@ -21,6 +21,7 @@ async def _main():
 
     root = pathlib.Path(__file__).resolve().parents[2]
     version = "v0.01"
+
     try:
         vfile = root / "VERSION"
         if vfile.exists():
@@ -29,6 +30,7 @@ async def _main():
         pass
 
     banner = f"😊 AIChaBo/あいちゃぼ {version}"
+
     print("+-------------------------------------------------")
     print(f"| {banner} 起動します。")
     print("+-------------------------------------------------")
@@ -54,6 +56,7 @@ async def _main():
     register_all(tree)
 
     token = os.getenv("DISCORD_BOT_TOKEN", "")
+
     if not token:
         print("❌ DISCORD_BOT_TOKEN が未設定です（.env か環境変数を確認してください）")
         return
@@ -67,7 +70,7 @@ async def _main():
     signal.signal(signal.SIGINT, _sig)
 
     if hasattr(signal, "SIGBREAK"):
-        signal.signal(signal.SIGBREAK", _sig)
+        signal.signal(signal.SIGBREAK, _sig)
 
     if hasattr(signal, "SIGTERM"):
         try:
