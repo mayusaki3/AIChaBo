@@ -1,0 +1,44 @@
+name: provider-registry-tests
+
+on:
+  push:
+    branches:
+      - develop
+      - feature/**
+  pull_request:
+    branches:
+      - develop
+
+jobs:
+  provider-registry-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run provider registry tests
+        run: |
+          python -m tests.common.chat.T09_ProviderRegistry_01_provider_registry_test
+
+      - name: Run provider bootstrap tests
+        run: |
+          python -m tests.ai.T01_ProviderBootstrap_01_provider_bootstrap_test
+
+      - name: Run static import boundary tests
+        run: |
+          python -m tests.common.chat.T10_StaticImportBoundary_01_common_chat_import_boundary_test
+
+      - name: Run registry-based mock tests
+        run: |
+          python -m tests.common.chat.T11_ChatLoopMockRegistry_01_chat_loop_mock_registry_test
